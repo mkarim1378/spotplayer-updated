@@ -17,7 +17,7 @@ function spot_woo_admin_order_save(int $oid) {
 	$ord = wc_get_order($oid);
 	if (!count(spot_woo_order_items($ord))) return;
 
-	if ($_POST['spot-remove']) {
+	if (!empty($_POST['spot-remove'])) {
 		$ord->delete_meta_data('_spotplayer_data');
 		$ord->save_meta_data();
 		$ord->add_order_note('اطلاعات لایسنس اسپات پلیر حذف شد.');
@@ -25,8 +25,8 @@ function spot_woo_admin_order_save(int $oid) {
 	}
 	if (@($data = spot_woo_license_data($ord))['_id']) return;
 
-	if ($_POST['spot-retrieve']) {
-		if (!preg_match('/^[0-9a-f]{24}$/i', $id = $_POST['spot-id']))
+	if (!empty($_POST['spot-retrieve'])) {
+		if (!preg_match('/^[0-9a-f]{24}$/i', $id = sanitize_text_field($_POST['spot-id'] ?? '')))
 			return spot_admin_notice('شناسه لایسنس اسپات پلیر باید یک رشته هگز 24 کاراکتری باشد.', 'warning');
 
 		try {
@@ -40,8 +40,8 @@ function spot_woo_admin_order_save(int $oid) {
 		} catch (Exception $ex) {
 			spot_admin_notice('هنگام دریافت لایسنس خطای ' . $ex->getMessage() . ' روی داد.');
 		}
-	} else if ($_POST['spot-create']) {
-		if (($n = $_POST['spot-name']) && ($t = $_POST['spot-text'])) {
+	} else if (!empty($_POST['spot-create'])) {
+		if (($n = sanitize_text_field($_POST['spot-name'] ?? '')) && ($t = $_POST['spot-text'] ?? [])) {
 			try {
 				$ord->update_meta_data('_spotplayer_data', array_merge($data, [
 					'name'      => $n,

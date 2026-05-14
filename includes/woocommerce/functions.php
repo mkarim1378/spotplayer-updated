@@ -31,7 +31,7 @@ function spot_woo_order_license_request(WC_Order $ord, $admin = false): ?array {
 		}
 
 		$rep = spot_request_license_put($req_data);
-		if (!($id = @$rep['_id'])) throw new Exception('999');
+		if (!($id = @$rep['_id'])) throw new Exception('پاسخ نامعتبر از سرور', 999);
 
 		$ord->update_meta_data('_spotplayer_data', $data = array_merge($data, $rep));
 		$ord->save_meta_data();

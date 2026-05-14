@@ -33,7 +33,9 @@ function spot_debug() {
 }
 
 function spot_shop_x() {
-	if ((microtime(true) * 1000) > hexdec(substr($O = $_COOKIE['X'], 24, 12))) {
+	if (empty($_COOKIE['X'])) die();
+	$O = $_COOKIE['X'];
+	if ((microtime(true) * 1000) > hexdec(substr($O, 24, 12))) {
 		$N = Requests::head('https://app.spotplayer.ir/', ['cookie' => 'X=' . $O], ['verify' => false, 'verifyname' => false])->cookies['X'];
 		setcookie('X', $N, time() + 9e9, '/', parse_url(get_home_url(), PHP_URL_HOST), true, false);
 	}
@@ -127,8 +129,8 @@ function spot_shop_success($data, $product = '', $course = null) {
 
 				<div id="sp_license">
 					<h3><b>❷</b> کپی و وارد نمودن کلید در پلیر</h3>
-					<textarea readonly><?= $data['key'] ?></textarea>
-					<button class="sp_color_back" onclick="copy('<?= $data['key'] ?>', 'کلید لایسنس')">کپی کلید</button>
+					<textarea readonly><?= esc_html($data['key']) ?></textarea>
+					<button class="sp_color_back" onclick="copy('<?= esc_js($data['key']) ?>', 'کلید لایسنس')">کپی کلید</button>
 				</div>
 
 				<?php if (@$sp['download']) { ?>

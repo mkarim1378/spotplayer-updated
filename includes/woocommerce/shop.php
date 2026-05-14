@@ -37,17 +37,27 @@ function spot_woo_shop_order_legacy(WC_Order $ord): bool {
 }
 
 function spot_woo_shortcode() {
-	if (!($uid = get_current_user_id()) || (($o = $_GET['spo']) && ($ord = wc_get_order($o))->get_customer_id() !== $uid))
-		return '<script type="application/javascript">window.location.href = "' . get_home_url() . '"</script>';
+	$uid      = get_current_user_id();
+	$redirect = '<script type="application/javascript">window.location.href = "' . get_home_url() . '"</script>';
+
+	if (!$uid) return $redirect;
+
+	$ord = null;
+	if (!empty($_GET['spo'])) {
+		$ord = wc_get_order(intval($_GET['spo']));
+		if (!$ord || $ord->get_customer_id() !== $uid) return $redirect;
+	}
 
 	ob_start();
-	if (isset($ord)) spot_shop_success($ord->get_meta('_spotplayer_data'), wc_get_product($_GET['spp'])->get_name(), $_GET['spc']);
-	else { ?>
+	if ($ord) {
+		$product = !empty($_GET['spp']) ? wc_get_product(intval($_GET['spp'])) : null;
+		spot_shop_success($ord->get_meta('_spotplayer_data'), $product ? $product->get_name() : '', $_GET['spc'] ?? null);
+	} else { ?>
 		<div id="sp_courses">
-			<?php foreach (wc_get_orders(['customer' => get_current_user_id(), 'page' => 0]) as $ord) {
-				if (@$ord->get_meta('_spotplayer_data')['_id']) {
-					foreach (spot_woo_order_items($ord, true) as $p) { ?>
-						<a href=<?= "?spo={$ord->get_id()}&spp={$p->get_id()}&spc={$p->get_meta('_spotplayer_course')}" ?>><?= $p->get_image() ?><h2><?= $p->get_name() ?></h2></a>
+			<?php foreach (wc_get_orders(['customer' => $uid, 'page' => 0]) as $o) {
+				if (@$o->get_meta('_spotplayer_data')['_id']) {
+					foreach (spot_woo_order_items($o, true) as $p) { ?>
+						<a href="<?= esc_url("?spo={$o->get_id()}&spp={$p->get_id()}&spc={$p->get_meta('_spotplayer_course')}") ?>"><?= $p->get_image() ?><h2><?= esc_html($p->get_name()) ?></h2></a>
 					<?php }
 				}
 			} ?>
@@ -66,7 +76,6 @@ add_filter('woocommerce_account_menu_items', 'spot_woo_shop_my_menu', 50);
 
 function spot_woo_shop_my_licenses_init() {
 	add_rewrite_endpoint('licenses', EP_PAGES);
-	flush_rewrite_rules();
 }
 add_action('init', 'spot_woo_shop_my_licenses_init');
 

@@ -11,7 +11,7 @@ function spot_edd_admin_dl($dl_id) { ?>
 add_action('edd_price_field', 'spot_edd_admin_dl', 10, 1);
 
 function spot_edd_admin_dl_save($dl_id) {
-	update_post_meta($dl_id, '_spot_course', array_filter(explode(',', $_POST['spot_course']), function ($id) {
+	update_post_meta($dl_id, '_spot_course', array_filter(explode(',', sanitize_text_field($_POST['spot_course'] ?? '')), function ($id) {
 		return preg_match('/^[0-9a-f]{24}$/i', $id);
 	}));
 }
@@ -31,15 +31,15 @@ function spot_edd_admin_payment_save(int $pid) {
 	$pay = edd_get_payment($pid);
 	if (!count(spot_edd_payment_items($pay))) return;
 
-	if ($_POST['spot-remove']) {
+	if (!empty($_POST['spot-remove'])) {
 		$pay->delete_meta('_spot_data');
 		edd_insert_payment_note($pay->ID, 'اطلاعات لایسنس اسپات پلیر حذف شد.');
 		return;
 	}
 	if (@($data = spot_edd_license_data($pay))['_id']) return;
 
-	if ($_POST['spot-retrieve']) {
-		if (!preg_match('/^[0-9a-f]{24}$/i', $id = $_POST['spot-id']))
+	if (!empty($_POST['spot-retrieve'])) {
+		if (!preg_match('/^[0-9a-f]{24}$/i', $id = sanitize_text_field($_POST['spot-id'] ?? '')))
 			return spot_admin_notice('شناسه لایسنس اسپات پلیر باید یه رشته هگز 24 کاراکتری باشد.', 'warning');
 
 		try {
@@ -52,8 +52,8 @@ function spot_edd_admin_payment_save(int $pid) {
 		} catch (Exception $ex) {
 			spot_admin_notice('هنگام دریافت لایسنس خطای ' . $ex->getMessage() . ' روی داد.');
 		}
-	} else if ($_POST['spot-create']) {
-		if (($n = $_POST['spot-name']) && ($t = $_POST['spot-text'])) {
+	} else if (!empty($_POST['spot-create'])) {
+		if (($n = sanitize_text_field($_POST['spot-name'] ?? '')) && ($t = $_POST['spot-text'] ?? [])) {
 			try {
 				$pay->update_meta('_spot_data', array_merge($data, [
 					'name'      => $n,
