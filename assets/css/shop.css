@@ -1,6 +1,6 @@
 @font-face {
     font-family: spfont;
-    src: url(font.woff);
+    src: url(../fonts/font.woff);
 }
 
 .woocommerce-order-details > #sp {
@@ -214,7 +214,6 @@
 #sp_videos > UL > LI > UL > LI.sp_seg > A > IMG {
     display: none !important;
 }
-
 
 /*--------------------------------------------------------------------*/
 #sp_courses {

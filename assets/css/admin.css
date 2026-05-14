@@ -1,6 +1,6 @@
 @font-face {
     font-family: spfont;
-    src: url(font.woff);
+    src: url(../fonts/font.woff);
 }
 
 #toplevel_page_spotplayer IMG {
