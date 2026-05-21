@@ -10,19 +10,31 @@ function spot_woo_shop_order(WC_Order $ord) {
 	$completed = ($status == 'completed');
 	if (@$sp['completed'] && !$completed) return;
 
-	try {
-		spot_shop_success(spot_woo_order_license_request($ord));
+	$data = spot_woo_license_data($ord);
 
-		if ($completed) return;
-		foreach ($ord->get_items() as $item)
-			if (($item instanceof WC_Order_Item_Product) &&
-				(($product = $item->get_product()) instanceof WC_Product) &&
-				!($product->is_downloadable() || $product->get_meta('_spotplayer_course'))) return;
-		$ord->update_status('completed');
-
-	} catch (Exception $ex) {
-		spot_shop_failed($ex->getMessage());
+	if (@$data['_id']) {
+		try {
+			spot_shop_success($data);
+			if ($completed) return;
+			foreach ($ord->get_items() as $item)
+				if (($item instanceof WC_Order_Item_Product) &&
+					(($product = $item->get_product()) instanceof WC_Product) &&
+					!($product->is_downloadable() || $product->get_meta('_spotplayer_course'))) return;
+			$ord->update_status('completed');
+		} catch (Exception $ex) {
+			spot_shop_failed($ex->getMessage());
+		}
+		return;
 	}
+
+	// License not ready yet — ensure background job is queued, then show pending UI
+	spot_schedule_license_async($ord->get_id()); ?>
+	<div id="spot_pending">
+		<div class="spot_pending_spinner"></div>
+		<p>لایسنس شما در حال آماده‌سازی است، لطفاً چند لحظه صبر کنید...</p>
+	</div>
+	<script>setTimeout(function () { window.location.reload(); }, 5000);</script>
+	<?php
 }
 add_action('woocommerce_order_details_before_order_table', 'spot_woo_shop_order');
 
@@ -52,17 +64,36 @@ function spot_woo_shortcode() {
 	if ($ord) {
 		$product = !empty($_GET['spp']) ? wc_get_product(intval($_GET['spp'])) : null;
 		spot_shop_success($ord->get_meta('_spotplayer_data'), $product ? $product->get_name() : '', $_GET['spc'] ?? null);
-	} else { ?>
+	} else {
+		$per_page = 12;
+		$paged    = max(1, intval($_GET['sppage'] ?? 1));
+
+		$result = wc_get_orders([
+			'customer'   => $uid,
+			'limit'      => $per_page,
+			'paged'      => $paged,
+			'paginate'   => true,
+			'meta_query' => [['key' => '_spotplayer_data', 'compare' => 'EXISTS']],
+		]); ?>
 		<div id="sp_courses">
-			<?php foreach (wc_get_orders(['customer' => $uid, 'page' => 0]) as $o) {
-				if (@$o->get_meta('_spotplayer_data')['_id']) {
-					foreach (spot_woo_order_items($o, true) as $p) { ?>
-						<a href="<?= esc_url("?spo={$o->get_id()}&spp={$p->get_id()}&spc={$p->get_meta('_spotplayer_course')}") ?>"><?= $p->get_image() ?><h2><?= esc_html($p->get_name()) ?></h2></a>
-					<?php }
-				}
+			<?php foreach ($result->orders as $o) {
+				foreach (spot_woo_order_items($o, true) as $p) { ?>
+					<a href="<?= esc_url("?spo={$o->get_id()}&spp={$p->get_id()}&spc={$p->get_meta('_spotplayer_course')}") ?>"><?= $p->get_image() ?><h2><?= esc_html($p->get_name()) ?></h2></a>
+				<?php }
 			} ?>
 		</div>
-	<?php }
+		<?php if ($result->max_num_pages > 1) { ?>
+			<div id="sp_pagination">
+				<?php if ($paged > 1) { ?>
+					<a href="<?= esc_url(add_query_arg('sppage', $paged - 1)) ?>" class="sp_page_btn">« صفحه قبل</a>
+				<?php } ?>
+				<span><?= $paged ?> از <?= $result->max_num_pages ?></span>
+				<?php if ($paged < $result->max_num_pages) { ?>
+					<a href="<?= esc_url(add_query_arg('sppage', $paged + 1)) ?>" class="sp_page_btn">صفحه بعد »</a>
+				<?php } ?>
+			</div>
+		<?php }
+	}
 	return ob_get_clean();
 }
 

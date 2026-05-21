@@ -19,9 +19,12 @@ function spot_edd_shortcode() {
 
 	ob_start();
 	if ($o) spot_shop_success(edd_get_payment($o)->get_meta('_spot_data'), get_the_title($o), $_GET['spc']);
-	else { ?>
+	else {
+		$per_page = 12;
+		$paged    = max(1, intval($_GET['sppage'] ?? 1));
+		$payments = edd_get_payments(['user' => $uid, 'number' => $per_page, 'page' => $paged, 'output' => 'payments']); ?>
 		<div id="sp_courses">
-			<?php foreach (edd_get_payments(['user' => $uid, 'output' => 'payments']) as $pay) {
+			<?php foreach ($payments as $pay) {
 				if (@$pay->get_meta('_spot_data')['_id']) {
 					foreach (spot_edd_payment_items($pay, true) as $d) { ?>
 						<a href=<?= "?spo=$pay->ID&spp={$d['id']}&spc={$d['course']}" ?>>
@@ -32,6 +35,16 @@ function spot_edd_shortcode() {
 				}
 			} ?>
 		</div>
-	<?php }
+		<?php if (count($payments) === $per_page || $paged > 1) { ?>
+			<div id="sp_pagination">
+				<?php if ($paged > 1) { ?>
+					<a href="<?= esc_url(add_query_arg('sppage', $paged - 1)) ?>" class="sp_page_btn">« صفحه قبل</a>
+				<?php } ?>
+				<?php if (count($payments) === $per_page) { ?>
+					<a href="<?= esc_url(add_query_arg('sppage', $paged + 1)) ?>" class="sp_page_btn">صفحه بعد »</a>
+				<?php } ?>
+			</div>
+		<?php }
+	}
 	return ob_get_clean();
 }
