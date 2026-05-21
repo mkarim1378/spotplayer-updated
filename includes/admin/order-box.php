@@ -27,9 +27,7 @@ function spot_admin_order_box($data) {
 		<tr>
 			<td></td>
 			<td>
-				<?php if ($disable) { ?>
-					<button class="remove" type="submit" name="spot-remove" value="1">حذف اطلاعات لایسنس از وردپرس</button>
-				<?php } else { ?>
+				<?php if (!$disable) { ?>
 					<button type="submit" name="spot-create" value="1">ایجاد لایسنس</button>
 					<button class="remove" type="submit" name="spot-remove" value="1">ریست اطلاعات</button>
 				<?php } ?>
