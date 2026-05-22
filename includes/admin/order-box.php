@@ -8,7 +8,7 @@ function spot_admin_order_box($data) {
 		<tr>
 			<td>شناسه:</td>
 			<td>
-				<input type="text" class="ltr" name="spot-id" value="<?= @$data['_id'] ?>" <?= $disable ?>/>
+				<input type="text" class="ltr" name="spot-id" value="<?= esc_attr(@$data['_id']) ?>" <?= $disable ?>/>
 				<?php if (!$disable) { ?>
 					<button type="submit" name="spot-retrieve" value="1">دریافت اطلاعات لایسنس با شناسه</button>
 				<?php } ?>
@@ -16,12 +16,12 @@ function spot_admin_order_box($data) {
 		</tr>
 		<tr>
 			<td>نام:</td>
-			<td><input type="text" name="spot-name" value="<?= $data['name'] ?>" <?= $disable ?>/></td>
+			<td><input type="text" name="spot-name" value="<?= esc_attr($data['name'] ?? '') ?>" <?= $disable ?>/></td>
 		</tr>
 		<?php for ($i = 0; $i < 3; $i++) { ?>
 			<tr>
 				<td>واترمارک <?= $i + 1 ?>:</td>
-				<td><input type="text" class="ltr" name="spot-text[<?= $i ?>]" value="<?= @$texts[$i]['text'] ?>" <?= $disable ?>/></td>
+				<td><input type="text" class="ltr" name="spot-text[<?= $i ?>]" value="<?= esc_attr(@$texts[$i]['text']) ?>" <?= $disable ?>/></td>
 			</tr>
 		<?php } ?>
 		<tr>

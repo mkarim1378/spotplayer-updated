@@ -6,13 +6,15 @@ function spot_request(string $url, $data = null) {
 	$method = $data === null ? 'GET' : 'POST';
 	$body   = $data === null ? [] : json_encode($data, JSON_UNESCAPED_UNICODE);
 
+	$ca_bundle = ABSPATH . WPINC . '/certificates/ca-bundle.crt';
+
 	$rep = json_decode(
 		Requests::request(
 			$url,
 			['Content-Type' => 'application/json', '$Level' => '-1', '$API' => get_option('spotplayer')['api'], 'X-WpSpot' => 12],
 			$body,
 			$method,
-			['verify' => false, 'verifyname' => false]
+			['verify' => file_exists($ca_bundle) ? $ca_bundle : true]
 		)->body,
 		true
 	);

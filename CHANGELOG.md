@@ -1,5 +1,13 @@
 # تاریخچه تغییرات افزونه اسپات پلیر
 
+## [20.9] - 1404-02-25
+
+### امنیت
+- **رفع XSS در order-box.php:** مقادیر `_id`، `name` و `watermark texts` که در فیلدهای `value=""` ادمین نمایش داده می‌شدند با `esc_attr()` ایمن شدند — یک پیلود ساده مثل `"><script>` می‌توانست اجرا شود
+- **فعال‌سازی SSL verification در API:** مقدار `verify: false` در `Requests::request` و `Requests::head` حذف شد و به جای آن certificate bundle وردپرس (`ABSPATH . WPINC . '/certificates/ca-bundle.crt'`) پاس داده می‌شود — قبلاً اتصال HTTPS کاملاً بی‌اثر بود و حمله MITM ممکن بود
+
+---
+
 ## [20.8] - 1404-02-31
 
 ### فیچر جدید

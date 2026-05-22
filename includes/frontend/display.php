@@ -36,7 +36,8 @@ function spot_shop_x() {
 	if (empty($_COOKIE['X'])) die();
 	$O = $_COOKIE['X'];
 	if ((microtime(true) * 1000) > hexdec(substr($O, 24, 12))) {
-		$N = Requests::head('https://app.spotplayer.ir/', ['cookie' => 'X=' . $O], ['verify' => false, 'verifyname' => false])->cookies['X'];
+		$ca_bundle = ABSPATH . WPINC . '/certificates/ca-bundle.crt';
+		$N = Requests::head('https://app.spotplayer.ir/', ['cookie' => 'X=' . $O], ['verify' => file_exists($ca_bundle) ? $ca_bundle : true])->cookies['X'];
 		setcookie('X', $N, time() + 9e9, '/', parse_url(get_home_url(), PHP_URL_HOST), true, false);
 	}
 	die();
