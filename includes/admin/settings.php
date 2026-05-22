@@ -24,6 +24,8 @@ function spot_admin_page() {
 	$p  = spot_woo_or_edd();
 	$sp = get_option('spotplayer');
 
+	$use_async = function_exists('as_schedule_single_action');
+
 	// پردازش فرم ایجاد سفارش دسته‌ای (۳ ستونه)
 	if (isset($_POST['bulk_product_id']) && isset($_FILES['bulk_excel']) && check_admin_referer('spotplayer_bulk_license', 'spotplayer_bulk_license_nonce')) {
 		$product_id = intval($_POST['bulk_product_id']);
@@ -31,9 +33,17 @@ function spot_admin_page() {
 
 		if (empty($_FILES['bulk_excel']['tmp_name'])) {
 			echo '<div class="error"><p>فایل اکسل ارسال نشد.</p></div>';
+		} elseif ($use_async) {
+			$res = spot_bulk_schedule_create_orders($product_id, $limit_raw, $_FILES['bulk_excel']['tmp_name']);
+			if ($res['queued'] > 0)
+				echo '<div class="updated"><p>✅ تعداد ' . $res['queued'] . ' ردیف در صف پردازش قرار گرفت. سفارشات و لایسنس‌ها به زودی در پس‌زمینه ساخته می‌شوند.</p></div>';
+			if (!empty($res['errors'])) {
+				echo '<div class="error"><p>❌ خطاها:</p><ul>';
+				foreach ($res['errors'] as $e) echo '<li>' . esc_html($e) . '</li>';
+				echo '</ul></div>';
+			}
 		} else {
 			$res = spot_bulk_create_orders_3col($product_id, $limit_raw, $_FILES['bulk_excel']['tmp_name']);
-
 			if (!empty($res['success'])) {
 				echo '<div class="updated"><p>✅ تعداد ' . count($res['success']) . ' سفارش با موفقیت تکمیل شد.</p>';
 				echo '<div style="max-height: 200px; overflow-y: auto;"><ul>';
@@ -53,10 +63,18 @@ function spot_admin_page() {
 	if (isset($_POST['bulk_disable_submit']) && isset($_FILES['bulk_disable_excel']) && check_admin_referer('spotplayer_bulk_disable', 'spotplayer_bulk_disable_nonce')) {
 		if (empty($_FILES['bulk_disable_excel']['tmp_name']) || !is_uploaded_file($_FILES['bulk_disable_excel']['tmp_name'])) {
 			echo '<div class="error"><p>فایل اکسل/CSV لایسنس‌ها به درستی ارسال نشده است.</p></div>';
+		} elseif ($use_async) {
+			$res = spot_bulk_schedule_disable_licenses($_FILES['bulk_disable_excel']['tmp_name']);
+			if ($res['queued'] > 0)
+				echo '<div class="updated"><p>✅ تعداد ' . $res['queued'] . ' لایسنس در صف غیرفعال‌سازی قرار گرفت و به زودی در پس‌زمینه پردازش می‌شود.</p></div>';
+			if (!empty($res['errors'])) {
+				echo '<div class="error"><p>❌ خطاها:</p><ul>';
+				foreach ($res['errors'] as $e) echo '<li>' . esc_html($e) . '</li>';
+				echo '</ul></div>';
+			}
 		} else {
 			try {
 				$res = spot_bulk_disable_licenses_from_csv($_FILES['bulk_disable_excel']['tmp_name']);
-
 				if (!empty($res['success'])) {
 					echo '<div class="updated"><p>تعداد ' . count($res['success']) . ' لایسنس با موفقیت غیرفعال شد.</p><ul>';
 					foreach ($res['success'] as $s)
@@ -64,7 +82,7 @@ function spot_admin_page() {
 					echo '</ul></div>';
 				}
 				if (!empty($res['errors'])) {
-					echo '<div class="error"><p>برخی ردیف‌ها در غیرفعال‌سازی با خطا مواجه شدند:</p><ul>';
+					echo '<div class="error"><p>برخی ردیف‌ها با خطا مواجه شدند:</p><ul>';
 					foreach ($res['errors'] as $e) echo '<li>' . esc_html($e) . '</li>';
 					echo '</ul></div>';
 				}
@@ -273,6 +291,37 @@ function spot_admin_page() {
 	</form>
 
 	<hr/>
+
+	<?php if ($use_async) {
+		$qs = spot_bulk_queue_status();
+		$as_url = admin_url('admin.php?page=action-scheduler&s=spot_bulk&status=pending');
+		$has_activity = ($qs['create']['pending'] + $qs['create']['running'] + $qs['create']['failed'] +
+		                 $qs['disable']['pending'] + $qs['disable']['running'] + $qs['disable']['failed']) > 0; ?>
+		<h2>وضعیت صف پردازش ناهمزمان</h2>
+		<table class="widefat" style="max-width: 600px; margin-bottom: 20px">
+			<thead><tr><th>عملیات</th><th>در انتظار</th><th>در حال اجرا</th><th>خطا</th><th>تکمیل</th></tr></thead>
+			<tbody>
+				<tr>
+					<td>ایجاد سفارش</td>
+					<td><?= $qs['create']['pending'] ?></td>
+					<td><?= $qs['create']['running'] ?></td>
+					<td style="color:<?= $qs['create']['failed'] ? '#900' : 'inherit' ?>"><?= $qs['create']['failed'] ?></td>
+					<td><?= $qs['create']['complete'] ?></td>
+				</tr>
+				<tr>
+					<td>غیرفعال‌سازی لایسنس</td>
+					<td><?= $qs['disable']['pending'] ?></td>
+					<td><?= $qs['disable']['running'] ?></td>
+					<td style="color:<?= $qs['disable']['failed'] ? '#900' : 'inherit' ?>"><?= $qs['disable']['failed'] ?></td>
+					<td><?= $qs['disable']['complete'] ?></td>
+				</tr>
+			</tbody>
+		</table>
+		<?php if ($has_activity) { ?>
+			<p><a href="<?= esc_url($as_url) ?>" target="_blank">مشاهده جزئیات در Action Scheduler ↗</a></p>
+		<?php } ?>
+		<hr/>
+	<?php } ?>
 
 	<h2>غیرفعال‌سازی دسته‌ای لایسنس‌های موجود از فایل اکسل/CSV</h2>
 	<p>شناسه هر لایسنس باید در ستونی با نام <code>id</code> قرار گیرد (۲۴ کاراکتر هگز).</p>
