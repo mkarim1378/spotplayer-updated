@@ -25,9 +25,13 @@ function spot_edd_payment_license_request(EDD_Payment $pay, $admin = false): ?ar
 		return $data;
 
 	} catch (Exception $ex) {
-		$err = sprintf('خطای %s هنگام ایجاد لایسنس روی داد.', '<b>«' . $ex->getMessage() . '»</b>');
-		edd_insert_payment_note($pay->ID, $err . (($ex->getCode() == 999) ? ' <a target="_blank" href="' . parse_url(get_home_url(), PHP_URL_PATH) . '/spdeb?id=' . $pay->ID . '">اطلاعات دیباگ</a>' : ''));
-		spot_admin_notice($err . ' <a href="' . get_edit_post_link($pay->ID) . '">سفارش ' . $pay->ID . '</a>');
+		$code_txt = $ex->getCode() ? ' (کد: ' . $ex->getCode() . ')' : '';
+		$err      = sprintf('خطای %s هنگام ایجاد لایسنس روی داد.', '<b>«' . $ex->getMessage() . '»</b>') . $code_txt;
+		$extra    = $ex->getCode() == 999
+			? ' <a target="_blank" href="' . parse_url(get_home_url(), PHP_URL_PATH) . '/spdeb?id=' . $pay->ID . '">اطلاعات دیباگ</a>'
+			: ' <a target="_blank" href="https://spotplayer.ir/help/api/wordpress">راهنما</a>';
+		edd_insert_payment_note($pay->ID, $err . $extra);
+		spot_admin_notice($err . $extra . ' — <a href="' . get_edit_post_link($pay->ID) . '">سفارش ' . $pay->ID . '</a>');
 		throw new Exception($err);
 	}
 }

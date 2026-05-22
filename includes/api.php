@@ -20,9 +20,10 @@ function spot_request(string $url, $data = null) {
 	);
 
 	if (is_array($rep) && isset($rep['ex'])) {
-		$ex  = $rep['ex'];
-		$msg = is_array($ex) && isset($ex['msg']) ? $ex['msg'] : 'خطای نامشخصی از سرور اسپات پلیر دریافت شد.';
-		throw new Exception($msg);
+		$ex   = $rep['ex'];
+		$msg  = is_array($ex) && isset($ex['msg'])  ? $ex['msg']          : 'خطای نامشخصی از سرور اسپات پلیر دریافت شد.';
+		$code = is_array($ex) && isset($ex['code']) ? intval($ex['code']) : 0;
+		throw new Exception($msg, $code);
 	}
 
 	return $rep;

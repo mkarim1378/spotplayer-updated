@@ -45,13 +45,14 @@ function spot_edd_admin_payment_save(int $pid) {
 
 		try {
 			$rep = spot_request_license_get($id);
-			if (!($id = @$rep['_id'])) throw new Exception('909');
+			if (!($id = @$rep['_id'])) throw new Exception('پاسخ نامعتبر از سرور', 999);
 
 			$pay->update_meta('_spot_data', $rep);
 			edd_insert_payment_note($pay->ID, $note = sprintf('اطلاعات لایسنس %s دریافت شد.', '<a href="https://panel.spotplayer.ir/license/edit/' . $id . '" target="_blank">' . $id . '</a>'));
 			spot_admin_notice($note . ' <a href="' . get_edit_post_link($pay->ID) . '">سفارش ' . $pay->ID . '</a>', 'info');
 		} catch (Exception $ex) {
-			spot_admin_notice('هنگام دریافت لایسنس خطای ' . $ex->getMessage() . ' روی داد.');
+			$code_txt = $ex->getCode() ? ' (کد: ' . $ex->getCode() . ')' : '';
+			spot_admin_notice('هنگام دریافت اطلاعات لایسنس خطا رخ داد: <b>«' . $ex->getMessage() . '»</b>' . $code_txt . ' — <a href="https://spotplayer.ir/help/api/wordpress" target="_blank">راهنما</a>');
 		}
 	} else if (!empty($_POST['spot-create'])) {
 		if (($n = sanitize_text_field($_POST['spot-name'] ?? '')) && ($t = $_POST['spot-text'] ?? [])) {

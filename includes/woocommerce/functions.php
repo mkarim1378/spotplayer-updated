@@ -39,9 +39,13 @@ function spot_woo_order_license_request(WC_Order $ord, $admin = false): ?array {
 		return $data;
 
 	} catch (Exception $ex) {
-		$err = sprintf('خطای %s هنگام ایجاد لایسنس روی داد.', '<b>«' . $ex->getMessage() . '»</b>');
-		$ord->add_order_note($err . (($ex->getCode() == 999) ? ' <a target="_blank" href="' . parse_url(get_home_url(), PHP_URL_PATH) . '/spdeb?id=' . $ord->get_id() . '">اطلاعات دیباگ</a>' : ''));
-		spot_admin_notice($err . ' <a href="' . get_edit_post_link($ord->get_id()) . '">سفارش ' . $ord->get_id() . '</a>');
+		$code_txt = $ex->getCode() ? ' (کد: ' . $ex->getCode() . ')' : '';
+		$err      = sprintf('خطای %s هنگام ایجاد لایسنس روی داد.', '<b>«' . $ex->getMessage() . '»</b>') . $code_txt;
+		$extra    = $ex->getCode() == 999
+			? ' <a target="_blank" href="' . parse_url(get_home_url(), PHP_URL_PATH) . '/spdeb?id=' . $ord->get_id() . '">اطلاعات دیباگ</a>'
+			: ' <a target="_blank" href="https://spotplayer.ir/help/api/wordpress">راهنما</a>';
+		$ord->add_order_note($err . $extra);
+		spot_admin_notice($err . $extra . ' — <a href="' . get_edit_post_link($ord->get_id()) . '">سفارش ' . $ord->get_id() . '</a>');
 		throw new Exception($err);
 	}
 }
