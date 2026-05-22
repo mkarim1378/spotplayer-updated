@@ -154,38 +154,10 @@ function spot_admin_page() {
 				</div>
 			</div>
 			<div class="description">
-				<div>کدی که به منظور ساخت لایسنس استفاده میشود. برای بازیابی مقدار پیشفرض این فیلد را خالی قرار داده و تنظیمات را ذخیره نمایید. برای ساخت لایسنس متغیرهای زیر در دسترس هستند:</div>
-				<?php if ($p == 1) { ?>
-					<div>متغیر order ووکامرس شامل اطلاعات سفارش است.</div>
-					<ul style="direction: ltr">
-						<li style="margin-top: 15px"><b>$order</b> <a target="_blank" href="https://woocommerce.github.io/code-reference/classes/WC-Order.html"><small>https://woocommerce.github.io/code-reference/classes/WC-Order.html</small></a></li>
-						<li>$order-&gt;get_formatted_billing_full_name()</li>
-						<li>$order-&gt;get_billing_phone()</li>
-						<li>$order-&gt;get_billing_email()</li>
-						<li>$order-&gt;get_meta("_meta_key")</li>
-					</ul>
-				<?php } else if ($p == 2) { ?>
-					<ul style="direction: ltr">
-						<li style="margin-top: 15px"><b>$payment</b> <a target="_blank" href="https://docs.easydigitaldownloads.com/article/1113-eddpayment"><small>https://docs.easydigitaldownloads.com/article/1113-eddpayment</small></a></li>
-						<li>$payment-&gt;first_name</li>
-						<li>$payment-&gt;last_name</li>
-						<li>$payment-&gt;email</li>
-					</ul>
-				<?php } else { ?>
-					<div style="color: red">هیچکدام از پلاگین‌های ووکامرس یا EDD فعال نیستند.</div>
-				<?php } ?>
-				<?php if ($p) { ?>
-					<div>متغیر user وردپرس شامل اطلاعات خریدار است.</div>
-					<ul style="direction: ltr">
-						<li style="margin-top: 15px"><b>$user</b> <a target="_blank" href="https://developer.wordpress.org/reference/classes/wp_user/"><small>https://developer.wordpress.org/reference/classes/wp_user/</small></a></li>
-						<li>$user-&gt;user_login</li>
-						<li>$user-&gt;user_firstname</li>
-						<li>$user-&gt;user_lastname</li>
-						<li>$user-&gt;user_email</li>
-						<li>$user-&gt;get('digits_phone')</li>
-					</ul>
-					<div><b style="color: #900">حتما از سیستم پیامک تایید شماره دیجیتس هنگام ثبت نام کاربران استفاده کنید تا واترمارک های ویدیو قابل ردگیری باشد.</b></div>
-				<?php } ?>
+				متغیرهای در دسترس: <code>$order</code><?= $p == 2 ? ' / <code>$payment</code>' : '' ?> (اطلاعات سفارش) و <code>$user</code> (اطلاعات خریدار) —
+				<a href="https://spotplayer.ir/help/api/wordpress" target="_blank">راهنمای کامل ↗</a>
+				<br>برای بازگشت به مقدار پیش‌فرض، فیلد را خالی کنید و ذخیره نمایید.
+				<?php if (!$p) echo '<br><span style="color:red">هیچکدام از افزونه‌های ووکامرس یا EDD فعال نیستند.</span>'; ?>
 			</div>
 		</td>
 	</tr>
@@ -412,9 +384,11 @@ function spot_admin_page() {
 
 	<hr/>
 	<h2>ایجاد سفارش دسته‌ای و لایسنس (از طریق محصول ووکامرس)</h2>
+	<?php if (!$use_async) { ?>
 	<div style="background: #fff8e5; border-left: 4px solid #ffb900; padding: 10px 15px; margin: 15px 0;">
 		<p><strong>⚠️ نکته مهم:</strong> برای جلوگیری از خطای Time-out سرور، پیشنهاد می‌شود فایل‌های حجیم را به دسته‌های ۵۰ تایی تقسیم کنید.</p>
 	</div>
+	<?php } ?>
 	<p>فایل CSV باید دارای ۳ ستون با هدرهای زیر باشد: نام (name)، نام خانوادگی (family)، موبایل (phone)</p>
 	<form method="post" enctype="multipart/form-data">
 		<?php wp_nonce_field('spotplayer_bulk_license', 'spotplayer_bulk_license_nonce'); ?>

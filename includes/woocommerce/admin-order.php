@@ -70,7 +70,7 @@ function spot_woo_orders_list_column_content($column, $order_id) {
 	if (!$order) return;
 	$data = $order->get_meta('_spotplayer_data');
 	if (empty($data['key'])) return;
-	echo '<button class="button spot-copy-key" data-key="' . esc_attr($data['key']) . '">کپی لایسنس</button>';
+	echo '<button type="button" class="button spot-copy-key" data-key="' . esc_attr($data['key']) . '">کپی لایسنس</button>';
 }
 add_action('manage_shop_order_posts_custom_column', 'spot_woo_orders_list_column_content', 10, 2);
 add_action('manage_woocommerce_page_wc-orders_custom_column', 'spot_woo_orders_list_column_content', 10, 2);
