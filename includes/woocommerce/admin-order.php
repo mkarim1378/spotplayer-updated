@@ -13,6 +13,7 @@ function spot_woo_admin_order_box() {
 
 function spot_woo_admin_order_save(int $oid) {
 	if (!current_user_can('administrator')) return;
+	if (!isset($_POST['spot_order_nonce']) || !wp_verify_nonce($_POST['spot_order_nonce'], 'spot_order_save')) return;
 
 	$ord = wc_get_order($oid);
 	if (!count(spot_woo_order_items($ord))) return;

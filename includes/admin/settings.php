@@ -31,7 +31,7 @@ function spot_admin_page() {
 		$product_id = intval($_POST['bulk_product_id']);
 		$limit_raw  = sanitize_text_field($_POST['bulk_chapters'] ?? '');
 
-		if (empty($_FILES['bulk_excel']['tmp_name'])) {
+		if (empty($_FILES['bulk_excel']['tmp_name']) || !is_uploaded_file($_FILES['bulk_excel']['tmp_name'])) {
 			echo '<div class="error"><p>فایل اکسل ارسال نشد.</p></div>';
 		} elseif ($use_async) {
 			$res = spot_bulk_schedule_create_orders($product_id, $limit_raw, $_FILES['bulk_excel']['tmp_name']);

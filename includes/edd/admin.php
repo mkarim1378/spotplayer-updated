@@ -27,6 +27,7 @@ add_action('edd_view_order_details_main_before', 'spot_edd_admin_payment_box', 1
 
 function spot_edd_admin_payment_save(int $pid) {
 	if (!current_user_can('administrator')) return;
+	if (!isset($_POST['spot_order_nonce']) || !wp_verify_nonce($_POST['spot_order_nonce'], 'spot_order_save')) return;
 
 	$pay = edd_get_payment($pid);
 	if (!count(spot_edd_payment_items($pay))) return;

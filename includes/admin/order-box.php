@@ -3,7 +3,8 @@ if (!defined('ABSPATH')) exit;
 
 function spot_admin_order_box($data) {
 	$texts   = @$data['watermark']['texts'];
-	$disable = @$data['_id'] ? 'disabled readonly' : ''; ?>
+	$disable = @$data['_id'] ? 'disabled readonly' : '';
+	wp_nonce_field('spot_order_save', 'spot_order_nonce'); ?>
 	<table class="widefat" style="border: none">
 		<tr>
 			<td>شناسه:</td>
