@@ -18,12 +18,6 @@ function spot_woo_admin_order_save(int $oid) {
 	$ord = wc_get_order($oid);
 	if (!count(spot_woo_order_items($ord))) return;
 
-	if (!empty($_POST['spot-remove'])) {
-		$ord->delete_meta_data('_spotplayer_data');
-		$ord->save_meta_data();
-		$ord->add_order_note('اطلاعات لایسنس اسپات پلیر حذف شد.');
-		return;
-	}
 	if (@($data = spot_woo_license_data($ord))['_id']) return;
 
 	if (!empty($_POST['spot-retrieve'])) {

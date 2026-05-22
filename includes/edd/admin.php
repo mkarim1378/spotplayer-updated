@@ -32,11 +32,6 @@ function spot_edd_admin_payment_save(int $pid) {
 	$pay = edd_get_payment($pid);
 	if (!count(spot_edd_payment_items($pay))) return;
 
-	if (!empty($_POST['spot-remove'])) {
-		$pay->delete_meta('_spot_data');
-		edd_insert_payment_note($pay->ID, 'اطلاعات لایسنس اسپات پلیر حذف شد.');
-		return;
-	}
 	if (@($data = spot_edd_license_data($pay))['_id']) return;
 
 	if (!empty($_POST['spot-retrieve'])) {

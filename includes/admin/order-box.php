@@ -30,7 +30,6 @@ function spot_admin_order_box($data) {
 			<td>
 				<?php if (!$disable) { ?>
 					<button type="submit" name="spot-create" value="1">ایجاد لایسنس</button>
-					<button class="remove" type="submit" name="spot-remove" value="1">ریست اطلاعات</button>
 				<?php } ?>
 			</td>
 		</tr>
