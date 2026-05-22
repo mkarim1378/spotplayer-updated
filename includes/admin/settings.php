@@ -11,7 +11,7 @@ add_filter('plugin_action_links', 'spot_plugin_action_links', 10, 2);
 
 function spot_admin_menu() {
 	register_setting('spotplayer', 'spotplayer');
-	add_menu_page('', 'اسپات پلیر', 'manage_options', 'spotplayer', 'spot_admin_page', SPOTPLAYER_URL . 'assets/svg/icon.svg');
+	add_menu_page('تنظیمات اسپات پلیر', 'اسپات پلیر', 'manage_options', 'spotplayer', 'spot_admin_page', SPOTPLAYER_URL . 'assets/svg/icon.svg');
 }
 add_action('admin_menu', 'spot_admin_menu');
 
@@ -92,177 +92,133 @@ function spot_admin_page() {
 		}
 	} ?>
 
+	<style>
+	.sp-card { background:#fff; border:1px solid #c3c4c7; border-radius:4px; padding:20px 24px; margin-bottom:20px; max-width:800px; }
+	.sp-card h2 { margin:0 0 16px; padding:0 0 12px; border-bottom:1px solid #f0f0f1; font-size:15px; }
+	.sp-field { margin-bottom:16px; }
+	.sp-field:last-child { margin-bottom:0; }
+	.sp-field > label { display:block; font-weight:600; margin-bottom:5px; }
+	.sp-field input[type=text], .sp-field textarea { width:100%; max-width:460px; }
+	.sp-field textarea { height:80px; font-family:monospace; direction:ltr; resize:vertical; }
+	.sp-check { display:flex; align-items:flex-start; gap:10px; padding:10px 14px; border-radius:3px; background:#f9f9f9; border:1px solid #f0f0f1; margin-bottom:8px; }
+	.sp-check:last-child { margin-bottom:0; }
+	.sp-check input[type=checkbox] { margin-top:3px; flex-shrink:0; }
+	.sp-check-label { font-weight:600; display:block; margin-bottom:2px; cursor:pointer; }
+	.sp-check-desc { color:#646970; font-size:12px; }
+	.sp-warn { color:#9e2a2a; font-size:12px; margin-top:3px; }
+	.sp-shortcode { background:#f0f6fc; border:1px solid #c3defa; border-radius:4px; padding:10px 16px; margin-bottom:20px; max-width:800px; font-size:13px; }
+	.sp-shortcode code { background:#dde8f7; padding:2px 6px; border-radius:3px; }
+	</style>
+
 	<div id="sp-settings" class="wrap">
-	<h1>
-		تنظیمات اسپات پلیر
-		<a href="https://spotplayer.ir/help/api/wordpress" target="_blank">(راهنما)</a>
-	</h1>
-	<!--suppress HtmlUnknownTarget -->
+	<h1>تنظیمات اسپات پلیر <a href="https://spotplayer.ir/help/api/wordpress" target="_blank" style="font-size:13px;font-weight:normal;vertical-align:middle;margin-right:6px">(راهنما ↗)</a></h1>
+
 	<form action="options.php" method="post">
 	<?php settings_fields('spotplayer') ?>
-	<table class="form-table" role="presentation">
-	<tbody>
-	<tr>
-		<th scope="row">کلید API</th>
-		<td>
-			<input type="text" name="spotplayer[api]" value="<?= @$sp['api'] ?>" required pattern="^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$">
-			<div class="description">
-				<div>کلید API که در داشبورد اسپات پلیر در دسترس است.</div>
-				<div><b style="color: #900">توجه داشته باشید تغییر کلمه عبور اسپات پلیر باعث تغییر کلید API خواهد شد.</b></div>
-			</div>
-		</td>
-	</tr>
-	<tr>
-		<th scope="row">دامنه ریبرندینگ</th>
-		<td>
-			<input type="text" name="spotplayer[domain]" value="<?= @$sp['domain'] ?>" pattern="^app[0-9]?(\.[a-z0-9\-]+){2,}$">
-			<div class="description">
-				<div><b style="color: #900">تنها در صورتی که سرویس ریبرندینگ را فعال کرده اید، دامنه تنظیم شده را به صورت app.example.com وارد نمایید.</b></div>
-			</div>
-		</td>
-	</tr>
-	<tr>
-		<th scope="row">رنگ اصلی</th>
-		<td>
-			<input type="color" name="spotplayer[color]" value="<?= @$sp['color'] ?: '#6611DD' ?>">
-		</td>
-	</tr>
-	<tr>
-		<th scope="row">کد ساخت لایسنس</th>
-		<td>
+
+	<div class="sp-card">
+		<h2>🔑 اتصال به اسپات پلیر</h2>
+		<div class="sp-field">
+			<label>کلید API</label>
+			<input type="text" name="spotplayer[api]" value="<?= esc_attr(@$sp['api']) ?>" required pattern="^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$">
+			<p class="description" style="margin-top:4px">کلید API از داشبورد اسپات پلیر. <span class="sp-warn" style="display:inline">تغییر رمز عبور اسپات پلیر، کلید API را هم تغییر می‌دهد.</span></p>
+		</div>
+		<div class="sp-field">
+			<label>دامنه ریبرندینگ <span style="font-weight:normal;color:#646970">(اختیاری)</span></label>
+			<input type="text" name="spotplayer[domain]" value="<?= esc_attr(@$sp['domain']) ?>" pattern="^app[0-9]?(\.[a-z0-9\-]+){2,}$" placeholder="app.example.com">
+			<p class="description" style="margin-top:4px">فقط در صورت فعال بودن سرویس ریبرندینگ وارد کنید.</p>
+		</div>
+	</div>
+
+	<div class="sp-card">
+		<h2>⚙️ ساخت لایسنس</h2>
+		<div class="sp-field">
+			<label>کد ساخت لایسنس</label>
 			<textarea name="spotplayer[code]"><?= spot_license_code() ?></textarea>
-			<div style="background: rgba(0,0,0,0.07); padding: 10px; border-radius: 5px; margin-bottom: 15px">
-				<div style="color: green;">خروجی کد برای آخرین سفارش ثبت شده:</div>
-				<div style="direction: ltr">
-					<?php
-					try {
-						$j = spot_woo_or_edd() == 1 ? spot_woo_license_data_eval(wc_get_orders(['limit' => 1])[0]) : spot_edd_license_data_eval(edd_get_payments(['number' => 1])[0]);
-						if (!$j) echo '<div style="color: red; direction: rtl">هیچ سفارش فعالی وجود ندارد. برای تست لطفا یک سفارش ایجاد کنید.</div>';
-						else {
-							echo '<pre>' . json_encode($j, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT) . '</pre>';
-							if (!$j['name'] || !$j['watermark']['texts'][0]['text']) {
-								$id = spot_woo_or_edd() == 1 ? wc_get_orders(['limit' => 1])[0]->get_id() : edd_get_payments(['number' => 1])[0]->ID;
-								$a  = '<div style="direction: rtl"><a target="_blank" href="' . parse_url(get_home_url(), PHP_URL_PATH) . '/spdeb?id=' . $id . '">اطلاعات دیباگ</a></div>';
-								if (!$j['name']) echo '<div style="color: red; direction: rtl">مقدار نام خالی است. لطفا از یک فیلد دیگر برای تعیین مقدار نام استفاده کنید.</div>' . $a;
-								if (!$j['watermark']['texts'][0]['text']) echo '<div style="color: red; direction: rtl">مقدار اولین واترمارک خالی است. لطفا از یک فیلد دیگر برای تعیین مقدار واترمارک استفاده کنید.</div>' . $a;
-							}
-						}
-					} catch (Error $e) {
-						echo '<div style="color: red">' . $e->getMessage() . '</div>';
-						echo '<div style="color: red; direction: rtl">لطفا سینتکس کد وارد شده را بررسی و اصلاح کرده و تنظیمات را ذخیره نمایید.</div>';
-					} ?>
-				</div>
-			</div>
-			<div class="description">
-				متغیرهای در دسترس: <code>$order</code><?= $p == 2 ? ' / <code>$payment</code>' : '' ?> (اطلاعات سفارش) و <code>$user</code> (اطلاعات خریدار) —
-				<a href="https://spotplayer.ir/help/api/wordpress" target="_blank">راهنمای کامل ↗</a>
-				<br>برای بازگشت به مقدار پیش‌فرض، فیلد را خالی کنید و ذخیره نمایید.
-				<?php if (!$p) echo '<br><span style="color:red">هیچکدام از افزونه‌های ووکامرس یا EDD فعال نیستند.</span>'; ?>
-			</div>
-		</td>
-	</tr>
-	<tr>
-		<th scope="row">تنظیمات ساخت لایسنس</th>
-		<td>
+			<p class="description" style="margin-top:4px">برای بازگشت به مقدار پیش‌فرض، خالی کنید و ذخیره نمایید. <a href="https://spotplayer.ir/help/api/wordpress" target="_blank">راهنما ↗</a></p>
+		</div>
+		<div class="sp-check">
+			<input type="checkbox" id="sp-test" name="spotplayer[test]" value="1" <?= $sp['test'] ? 'checked' : '' ?>>
 			<div>
-				<input type="checkbox" name="spotplayer[test]" value="1" <?= $sp['test'] ? 'checked="checked"' : '' ?>>
-				<b>حالت تستی ایجاد لایسنس ←</b>
-				فعال بودن این گزینه باعث ایجاد شدن لایسنس های تستی پس از خریدها میشود.
-				<div><b style="color: #900">به یاد داشته باشید که پس از تست افزونه حتما این گزینه را غیرفعال نمایید زیرا باعث میشود لایسنس‌های جدید جایگزین لایسنس‌های قبلی شوند.</b></div>
+				<label class="sp-check-label" for="sp-test">حالت تستی</label>
+				<div class="sp-check-desc">لایسنس‌های ساخته‌شده پس از خرید تستی خواهند بود.</div>
+				<div class="sp-warn">پس از تست حتماً غیرفعال کنید — در حالت تستی لایسنس‌های جدید جایگزین قبلی می‌شوند.</div>
 			</div>
-		</td>
-	</tr>
-	<tr>
-		<th scope="row"></th>
-		<td>
+		</div>
+		<div class="sp-check">
+			<input type="checkbox" id="sp-time" name="spotplayer[time]" value="<?= $sp['time'] ?: time() ?>" <?= $sp['time'] ? 'checked' : '' ?>>
 			<div>
-				<input type="checkbox" name="spotplayer[time]" value="<?= $sp['time'] ?: time() ?>" <?= $sp['time'] ? 'checked="checked"' : '' ?>>
-				<b>عدم ایجاد لایسنس برای سفارشات قدیمی ←</b>
-				فعال کردن این گزینه باعث میشود لایسنس برای سفارشاتی که قبل از فعال کردن این گزینه ثبت شده‌اند ایجاد نشود.
+				<label class="sp-check-label" for="sp-time">عدم ایجاد لایسنس برای سفارشات قدیمی</label>
+				<div class="sp-check-desc">سفارشاتی که قبل از فعال‌کردن این گزینه ثبت شده‌اند لایسنس دریافت نمی‌کنند.</div>
 			</div>
-		</td>
-	</tr>
-	<tr>
-		<th scope="row"></th>
-		<td>
+		</div>
+		<div class="sp-check">
+			<input type="checkbox" id="sp-completed" name="spotplayer[completed]" value="1" <?= $sp['completed'] ? 'checked' : '' ?>>
 			<div>
-				<input type="checkbox" name="spotplayer[completed]" value="1" <?= $sp['completed'] ? 'checked="checked"' : '' ?>>
-				<b>ایجاد لایسنس پس از تکمیل سفارش به صورت دستی ←</b>
-				فعال کردن این گزینه باعث میشود چنین سفارشی پس از پرداخت به حالت در حال انجام رفته و تا زمانی که تایید نشده است لایسنس ایجاد نشود.
-				<div><b style="color: #900">توجه داشته باشید در صورتی که محصول دانلودی باشد ووکامرس به صورت خودکار سفارش را تکمیل خواهد کرد.</b></div>
+				<label class="sp-check-label" for="sp-completed">ایجاد لایسنس فقط پس از تکمیل دستی سفارش</label>
+				<div class="sp-check-desc">سفارش پس از پرداخت به وضعیت «در حال انجام» می‌رود و تا تأیید ادمین لایسنس ساخته نمی‌شود.</div>
+				<div class="sp-warn">برای محصولات دانلودی، ووکامرس سفارش را خودکار تکمیل می‌کند.</div>
 			</div>
-		</td>
-	</tr>
-	<tr>
-		<th scope="row">تنظیمات نمایش</th>
-		<td>
+		</div>
+	</div>
+
+	<div class="sp-card">
+		<h2>🎨 نمایش</h2>
+		<div class="sp-field">
+			<label>رنگ اصلی</label>
+			<input type="color" name="spotplayer[color]" value="<?= esc_attr(@$sp['color'] ?: '#6611DD') ?>">
+		</div>
+		<div class="sp-check">
+			<input type="checkbox" id="sp-web" name="spotplayer[web]" value="1" <?= $sp['web'] ? 'checked' : '' ?>
+			       onchange="const w=document.getElementById('sp-webonly');(w.disabled=!this.checked)?w.checked=false:null;w.onchange(null)">
 			<div>
-				<input type="checkbox" name="spotplayer[web]" value="1" <?= $sp['web'] ? 'checked="checked"' : '' ?>
-				       onchange="const w = document.getElementById('webonly'); (w.disabled = !this.checked) ? (w.checked = false) : null; w.onchange(null)">
-				<b>نمایش نسخه وب در سایت ←</b>
-				فعال کردن این گزینه باعث میشود در صورتی که نسخه وب برای لایسنس ساخته شده فعال باشد پلیر تحت وب در سایت شما نمایش داده شود.
+				<label class="sp-check-label" for="sp-web">نمایش پلیر وب در سایت</label>
+				<div class="sp-check-desc">پلیر آنلاین اسپات پلیر را در صفحه دوره‌های کاربر نمایش می‌دهد.</div>
 			</div>
-		</td>
-	</tr>
-	<tr>
-		<th scope="row"></th>
-		<td>
+		</div>
+		<div class="sp-check">
+			<input type="checkbox" id="sp-webonly" name="spotplayer[webonly]" value="1" <?= $sp['webonly'] ? 'checked' : '' ?> <?= $sp['web'] ? '' : 'disabled' ?>
+			       onchange="const d=document.getElementById('sp-download');(d.disabled=this.checked)?d.checked=false:null">
 			<div>
-				<input id="webonly" <?= $sp['web'] ? '' : 'disabled="disabled"' ?> type="checkbox" name="spotplayer[webonly]" value="1" <?= $sp['webonly'] ? 'checked="checked"' : '' ?>
-				       onchange="const d = document.getElementById('download'); (d.disabled = this.checked) ? (d.checked = false) : null;">
-				<b>فقط نمایش نسخه وب ←</b>
-				فعال کردن این گزینه باعث میشود که فقط نسخه وب نمایش داده شده و نسخه های نیتیو و لیست دانلود نمایش داده نشوند.
+				<label class="sp-check-label" for="sp-webonly">فقط نمایش پلیر وب</label>
+				<div class="sp-check-desc">نسخه‌های نیتیو و لیست دانلود پنهان می‌شوند.</div>
 			</div>
-		</td>
-	</tr>
-	<tr>
-		<th scope="row"></th>
-		<td>
+		</div>
+		<div class="sp-check">
+			<input type="checkbox" id="sp-download" name="spotplayer[download]" value="1" <?= $sp['download'] ? 'checked' : '' ?> <?= $sp['webonly'] ? 'disabled' : '' ?>>
 			<div>
-				<input id="download" <?= $sp['webonly'] ? 'disabled="disabled"' : '' ?> type="checkbox" name="spotplayer[download]" value="1" <?= $sp['download'] ? 'checked="checked"' : '' ?>>
-				<b>نمایش لیست دانلود ←</b>
-				از آنجایی که برنامه به طور خودکار فایل‌ها را دانلود کرده و نمایش می‌دهد این گزینه به طور پیشفرض غیرفعال است.
+				<label class="sp-check-label" for="sp-download">نمایش لیست دانلود</label>
+				<div class="sp-check-desc">پلیر فایل‌ها را خودکار دانلود می‌کند؛ این گزینه پیش‌فرضاً غیرفعال است.</div>
 			</div>
-		</td>
-	</tr>
-	<?php if (spot_woo_or_edd() == 1) { ?>
-		<tr>
-			<th scope="row"></th>
-			<td>
-				<div>
-					<input type="checkbox" name="spotplayer[wccrs]" value="1" <?= $sp['wccrs'] ? 'checked="checked"' : '' ?>>
-					<b>نمایش گزینه لایسنس‌های من در منوی کاربری ووکامرس ←</b>
-					فعال کردن این گزینه باعث میشود در منوی حساب من ووکامرس گزینه لایسنس‌های من که به صفحه شورت کد دوره‌ها لینک است نمایش داده شود.
-				</div>
-			</td>
-		</tr>
-	<?php }
-	if (class_exists('Studiare_Core')) { ?>
-		<tr>
-			<th scope="row"></th>
-			<td>
-				<div>
-					<input type="checkbox" name="spotplayer[wcspc]" value="1" <?= $sp['wcspc'] ? 'checked="checked"' : '' ?>>
-					<b>حذف لینک دوره‌های خریداری شده قالب استادیار از منوی کاربری ووکامرس ←</b>
-				</div>
-			</td>
-		</tr>
-	<?php } ?>
-	<tr>
-		<th scope="row">شورت کدها</th>
-		<td>
+		</div>
+		<?php if (spot_woo_or_edd() == 1) { ?>
+		<div class="sp-check">
+			<input type="checkbox" id="sp-wccrs" name="spotplayer[wccrs]" value="1" <?= $sp['wccrs'] ? 'checked' : '' ?>>
 			<div>
-				<b>spotplayer_courses</b>
-				با استفاده از این شورت کد، کل دوره‌های سفارش‌های لایسنس دار کاربر با امکان مشاهده آنلاین و دریافت لایسنس نمایش داده میشود.
+				<label class="sp-check-label" for="sp-wccrs">نمایش «لایسنس‌های من» در منوی حساب ووکامرس</label>
+				<div class="sp-check-desc">لینک به صفحه شورت‌کد دوره‌ها در منوی My Account اضافه می‌شود.</div>
 			</div>
-		</td>
-	</tr>
-	</tbody>
-	</table>
+		</div>
+		<?php } if (class_exists('Studiare_Core')) { ?>
+		<div class="sp-check">
+			<input type="checkbox" id="sp-wcspc" name="spotplayer[wcspc]" value="1" <?= $sp['wcspc'] ? 'checked' : '' ?>>
+			<div>
+				<label class="sp-check-label" for="sp-wcspc">حذف لینک دوره‌های قالب استادیار از منوی ووکامرس</label>
+			</div>
+		</div>
+		<?php } ?>
+	</div>
+
+	<div class="sp-shortcode">
+		شورت‌کد <code>[spotplayer_courses]</code> — دوره‌های لایسنس‌دار کاربر را با امکان مشاهده آنلاین و دریافت لایسنس نمایش می‌دهد.
+	</div>
+
 	<p class="submit"><input type="submit" name="submit" id="submit" class="button button-primary" value="ذخیره تنظیمات"></p>
 	</form>
 
-	<hr/>
+	<hr style="max-width:800px;margin:0 0 20px"/>
+
+
 
 	<?php if ($use_async) {
 		$qs           = spot_bulk_queue_status();
