@@ -60,3 +60,40 @@ function spot_woo_admin_order_save(int $oid) {
 	}
 }
 add_action('woocommerce_process_shop_order_meta', 'spot_woo_admin_order_save', 10, 1);
+
+// ── License copy button in orders list ───────────────────────────────────────
+
+function spot_woo_orders_list_column($columns) {
+	$columns['spot_license'] = 'لایسنس اسپات پلیر';
+	return $columns;
+}
+add_filter('manage_edit-shop_order_columns', 'spot_woo_orders_list_column');
+add_filter('manage_woocommerce_page_wc-orders_columns', 'spot_woo_orders_list_column');
+
+function spot_woo_orders_list_column_content($column, $order_id) {
+	if ($column !== 'spot_license') return;
+	$order = wc_get_order($order_id);
+	if (!$order) return;
+	$data = $order->get_meta('_spotplayer_data');
+	if (empty($data['key'])) return;
+	echo '<button class="button spot-copy-key" data-key="' . esc_attr($data['key']) . '">کپی لایسنس</button>';
+}
+add_action('manage_shop_order_posts_custom_column', 'spot_woo_orders_list_column_content', 10, 2);
+add_action('manage_woocommerce_page_wc-orders_custom_column', 'spot_woo_orders_list_column_content', 10, 2);
+
+add_action('admin_footer', function () {
+	$screen = get_current_screen();
+	if (!$screen || !in_array($screen->id, ['edit-shop_order', 'woocommerce_page_wc-orders'])) return;
+	?>
+	<script>
+	document.addEventListener('click', function (e) {
+		var btn = e.target.closest('.spot-copy-key');
+		if (!btn) return;
+		var key = btn.dataset.key, orig = btn.textContent;
+		function done() { btn.textContent = '✓ کپی شد'; setTimeout(function () { btn.textContent = orig; }, 2000); }
+		function legacy() { var t = document.createElement('textarea'); t.value = key; t.style.cssText = 'position:absolute;opacity:0'; document.body.appendChild(t); t.select(); document.execCommand('copy'); document.body.removeChild(t); }
+		navigator.clipboard ? navigator.clipboard.writeText(key).then(done).catch(function () { legacy(); done(); }) : (legacy(), done());
+	});
+	</script>
+	<?php
+});
