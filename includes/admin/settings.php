@@ -132,11 +132,6 @@ function spot_admin_page() {
 
 	<div class="sp-card">
 		<h2>⚙️ ساخت لایسنس</h2>
-		<div class="sp-field">
-			<label>کد ساخت لایسنس</label>
-			<textarea name="spotplayer[code]"><?= spot_license_code() ?></textarea>
-			<p class="description" style="margin-top:4px">برای بازگشت به مقدار پیش‌فرض، خالی کنید و ذخیره نمایید. <a href="https://spotplayer.ir/help/api/wordpress" target="_blank">راهنما ↗</a></p>
-		</div>
 		<div class="sp-check">
 			<input type="checkbox" id="sp-test" name="spotplayer[test]" value="1" <?= $sp['test'] ? 'checked' : '' ?>>
 			<div>
@@ -218,42 +213,41 @@ function spot_admin_page() {
 
 	<hr style="max-width:800px;margin:0 0 20px"/>
 
-
-
 	<?php if ($use_async) {
 		$qs           = spot_bulk_queue_status();
 		$as_url       = admin_url('admin.php?page=action-scheduler&s=spot_bulk&status=pending');
 		$active_count = $qs['create']['pending'] + $qs['create']['running'] + $qs['disable']['pending'] + $qs['disable']['running'];
 		$has_any      = $active_count + $qs['create']['failed'] + $qs['create']['complete'] + $qs['disable']['failed'] + $qs['disable']['complete'] > 0;
 		$queue_nonce  = wp_create_nonce('spot_queue_status'); ?>
-		<h2>وضعیت صف پردازش ناهمزمان</h2>
-		<table id="spot-qs-table" class="widefat" style="max-width: 600px; margin-bottom: 10px">
-			<thead><tr><th>عملیات</th><th>در انتظار</th><th>در حال اجرا</th><th>خطا</th><th>تکمیل</th></tr></thead>
-			<tbody>
-				<tr>
-					<td>ایجاد سفارش</td>
-					<td id="spot-qs-create-pending"><?= $qs['create']['pending'] ?></td>
-					<td id="spot-qs-create-running"><?= $qs['create']['running'] ?></td>
-					<td id="spot-qs-create-failed" style="color:<?= $qs['create']['failed'] ? '#900' : 'inherit' ?>"><?= $qs['create']['failed'] ?></td>
-					<td id="spot-qs-create-complete"><?= $qs['create']['complete'] ?></td>
-				</tr>
-				<tr>
-					<td>غیرفعال‌سازی لایسنس</td>
-					<td id="spot-qs-disable-pending"><?= $qs['disable']['pending'] ?></td>
-					<td id="spot-qs-disable-running"><?= $qs['disable']['running'] ?></td>
-					<td id="spot-qs-disable-failed" style="color:<?= $qs['disable']['failed'] ? '#900' : 'inherit' ?>"><?= $qs['disable']['failed'] ?></td>
-					<td id="spot-qs-disable-complete"><?= $qs['disable']['complete'] ?></td>
-				</tr>
-			</tbody>
-		</table>
-		<p id="spot-qs-status" style="margin:6px 0 15px">
-			<?php if ($active_count > 0) { ?>
-				<span id="spot-qs-spinner">⏳ در حال پردازش — صفحه به‌روز می‌شود…</span>
-			<?php } else if ($has_any) { ?>
-				<a href="<?= esc_url($as_url) ?>" target="_blank">مشاهده جزئیات در Action Scheduler ↗</a>
-			<?php } ?>
-		</p>
-		<hr/>
+		<div class="sp-card">
+			<h2>⏳ وضعیت صف پردازش ناهمزمان</h2>
+			<table id="spot-qs-table" class="widefat" style="margin-bottom:12px">
+				<thead><tr><th>عملیات</th><th>در انتظار</th><th>در حال اجرا</th><th>خطا</th><th>تکمیل</th></tr></thead>
+				<tbody>
+					<tr>
+						<td>ایجاد سفارش</td>
+						<td id="spot-qs-create-pending"><?= $qs['create']['pending'] ?></td>
+						<td id="spot-qs-create-running"><?= $qs['create']['running'] ?></td>
+						<td id="spot-qs-create-failed" style="color:<?= $qs['create']['failed'] ? '#900' : 'inherit' ?>"><?= $qs['create']['failed'] ?></td>
+						<td id="spot-qs-create-complete"><?= $qs['create']['complete'] ?></td>
+					</tr>
+					<tr>
+						<td>غیرفعال‌سازی لایسنس</td>
+						<td id="spot-qs-disable-pending"><?= $qs['disable']['pending'] ?></td>
+						<td id="spot-qs-disable-running"><?= $qs['disable']['running'] ?></td>
+						<td id="spot-qs-disable-failed" style="color:<?= $qs['disable']['failed'] ? '#900' : 'inherit' ?>"><?= $qs['disable']['failed'] ?></td>
+						<td id="spot-qs-disable-complete"><?= $qs['disable']['complete'] ?></td>
+					</tr>
+				</tbody>
+			</table>
+			<p id="spot-qs-status" style="margin:0">
+				<?php if ($active_count > 0) { ?>
+					<span id="spot-qs-spinner">⏳ در حال پردازش — صفحه به‌روز می‌شود…</span>
+				<?php } else if ($has_any) { ?>
+					<a href="<?= esc_url($as_url) ?>" target="_blank">مشاهده جزئیات در Action Scheduler ↗</a>
+				<?php } ?>
+			</p>
+		</div>
 		<script>
 		(function () {
 			var nonce     = <?= json_encode($queue_nonce) ?>;
@@ -289,7 +283,6 @@ function spot_admin_page() {
 				if (nowActive > 0) {
 					status.innerHTML = '<span id="spot-qs-spinner">⏳ در حال پردازش — صفحه به‌روز می‌شود…</span>';
 				} else if (active > 0) {
-					// was active, now done
 					var hasFailed = (c.failed + d.failed) > 0;
 					status.innerHTML = (hasFailed ? '⚠️ پردازش با برخی خطاها تکمیل شد. ' : '✅ پردازش با موفقیت تکمیل شد. ')
 						+ '<a href="' + asUrl + '" target="_blank">جزئیات در Action Scheduler ↗</a>';
@@ -319,41 +312,34 @@ function spot_admin_page() {
 		</script>
 	<?php } ?>
 
-	<h2>غیرفعال‌سازی دسته‌ای لایسنس‌های موجود از فایل اکسل/CSV</h2>
-	<p>شناسه هر لایسنس باید در ستونی با نام <code>id</code> قرار گیرد (۲۴ کاراکتر هگز).</p>
-	<form method="post" enctype="multipart/form-data">
-		<?php wp_nonce_field('spotplayer_bulk_disable', 'spotplayer_bulk_disable_nonce'); ?>
-		<table class="form-table" role="presentation">
-			<tbody>
-			<tr>
-				<th scope="row"><label for="bulk_disable_excel">فایل اکسل (CSV) لایسنس‌های موجود</label></th>
-				<td>
-					<input type="file" name="bulk_disable_excel" id="bulk_disable_excel" accept=".csv" required>
-					<p class="description">فایل CSV که در ردیف اول آن ستونی با نام <code>id</code> و در ردیف‌های بعدی شناسه لایسنس‌ها قرار دارد.</p>
-				</td>
-			</tr>
-			</tbody>
-		</table>
-		<input type="hidden" name="bulk_disable_submit" value="1">
-		<?php submit_button('غیرفعال‌سازی لایسنس‌ها'); ?>
-	</form>
-
-	<hr/>
-	<h2>ایجاد سفارش دسته‌ای و لایسنس (از طریق محصول ووکامرس)</h2>
-	<?php if (!$use_async) { ?>
-	<div style="background: #fff8e5; border-left: 4px solid #ffb900; padding: 10px 15px; margin: 15px 0;">
-		<p><strong>⚠️ نکته مهم:</strong> برای جلوگیری از خطای Time-out سرور، پیشنهاد می‌شود فایل‌های حجیم را به دسته‌های ۵۰ تایی تقسیم کنید.</p>
+	<div class="sp-card">
+		<h2>🗂 غیرفعال‌سازی دسته‌ای لایسنس‌ها از CSV</h2>
+		<p style="margin-top:0;color:#646970;font-size:13px">شناسه هر لایسنس باید در ستونی با نام <code>id</code> قرار گیرد (۲۴ کاراکتر هگز).</p>
+		<form method="post" enctype="multipart/form-data">
+			<?php wp_nonce_field('spotplayer_bulk_disable', 'spotplayer_bulk_disable_nonce'); ?>
+			<div class="sp-field">
+				<label for="bulk_disable_excel">فایل اکسل (CSV) لایسنس‌های موجود</label>
+				<input type="file" name="bulk_disable_excel" id="bulk_disable_excel" accept=".csv" required>
+				<p class="description" style="margin-top:4px">فایل CSV که در ردیف اول آن ستونی با نام <code>id</code> و در ردیف‌های بعدی شناسه لایسنس‌ها قرار دارد.</p>
+			</div>
+			<input type="hidden" name="bulk_disable_submit" value="1">
+			<?php submit_button('غیرفعال‌سازی لایسنس‌ها'); ?>
+		</form>
 	</div>
-	<?php } ?>
-	<p>فایل CSV باید دارای ۳ ستون با هدرهای زیر باشد: نام (name)، نام خانوادگی (family)، موبایل (phone)</p>
-	<form method="post" enctype="multipart/form-data">
-		<?php wp_nonce_field('spotplayer_bulk_license', 'spotplayer_bulk_license_nonce'); ?>
-		<table class="form-table" role="presentation">
-			<tbody>
-			<tr>
-				<th scope="row"><label for="bulk_product_id">انتخاب محصول ووکامرس</label></th>
-				<td>
-					<select name="bulk_product_id" id="bulk_product_id" class="regular-text" required>
+
+	<div class="sp-card">
+		<h2>📋 ایجاد سفارش دسته‌ای و لایسنس (از طریق محصول ووکامرس)</h2>
+		<?php if (!$use_async) { ?>
+		<div style="background:#fff8e5;border-left:4px solid #ffb900;padding:10px 15px;margin-bottom:16px;border-radius:3px">
+			<strong>⚠️ نکته مهم:</strong> برای جلوگیری از خطای Time-out سرور، پیشنهاد می‌شود فایل‌های حجیم را به دسته‌های ۵۰ تایی تقسیم کنید.
+		</div>
+		<?php } ?>
+		<p style="margin-top:0;color:#646970;font-size:13px">فایل CSV باید دارای ۳ ستون با هدرهای زیر باشد: نام (name)، نام خانوادگی (family)، موبایل (phone)</p>
+		<form method="post" enctype="multipart/form-data">
+			<?php wp_nonce_field('spotplayer_bulk_license', 'spotplayer_bulk_license_nonce'); ?>
+			<div class="sp-field">
+				<label for="bulk_product_id">انتخاب محصول ووکامرس</label>
+				<select name="bulk_product_id" id="bulk_product_id" style="width:100%;max-width:460px" required>
 					<option value="">-- محصول یا متغیر را انتخاب کنید --</option>
 					<?php
 					$all_products = wc_get_products(['status' => 'publish', 'limit' => -1]);
@@ -372,24 +358,20 @@ function spot_admin_page() {
 							<?php }
 						}
 					endforeach; ?>
-					</select>
-				</td>
-			</tr>
-			<tr>
-				<th scope="row"><label for="bulk_chapters">محدودیت سرفصل (Limit)</label></th>
-				<td>
-					<input type="text" name="bulk_chapters" id="bulk_chapters" class="regular-text ltr" placeholder="مثال: 0- یا 1,4-6">
-					<p class="description">اختیاری. این محدودیت روی لایسنس‌ها اعمال خواهد شد.</p>
-				</td>
-			</tr>
-			<tr>
-				<th scope="row"><label for="bulk_excel">فایل اکسل (CSV)</label></th>
-				<td><input type="file" name="bulk_excel" id="bulk_excel" accept=".csv" required></td>
-			</tr>
-			</tbody>
-		</table>
-		<?php submit_button('ایجاد سفارشات و لایسنس‌ها'); ?>
-	</form>
+				</select>
+			</div>
+			<div class="sp-field">
+				<label for="bulk_chapters">محدودیت سرفصل (Limit)</label>
+				<input type="text" name="bulk_chapters" id="bulk_chapters" style="direction:ltr" placeholder="مثال: 0- یا 1,4-6">
+				<p class="description" style="margin-top:4px">اختیاری. این محدودیت روی لایسنس‌ها اعمال خواهد شد.</p>
+			</div>
+			<div class="sp-field">
+				<label for="bulk_excel">فایل اکسل (CSV)</label>
+				<input type="file" name="bulk_excel" id="bulk_excel" accept=".csv" required>
+			</div>
+			<?php submit_button('ایجاد سفارشات و لایسنس‌ها'); ?>
+		</form>
+	</div>
 	</div>
 	<?php
 }
