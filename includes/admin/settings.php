@@ -293,34 +293,102 @@ function spot_admin_page() {
 	<hr/>
 
 	<?php if ($use_async) {
-		$qs = spot_bulk_queue_status();
-		$as_url = admin_url('admin.php?page=action-scheduler&s=spot_bulk&status=pending');
-		$has_activity = ($qs['create']['pending'] + $qs['create']['running'] + $qs['create']['failed'] +
-		                 $qs['disable']['pending'] + $qs['disable']['running'] + $qs['disable']['failed']) > 0; ?>
+		$qs           = spot_bulk_queue_status();
+		$as_url       = admin_url('admin.php?page=action-scheduler&s=spot_bulk&status=pending');
+		$active_count = $qs['create']['pending'] + $qs['create']['running'] + $qs['disable']['pending'] + $qs['disable']['running'];
+		$has_any      = $active_count + $qs['create']['failed'] + $qs['create']['complete'] + $qs['disable']['failed'] + $qs['disable']['complete'] > 0;
+		$queue_nonce  = wp_create_nonce('spot_queue_status'); ?>
 		<h2>وضعیت صف پردازش ناهمزمان</h2>
-		<table class="widefat" style="max-width: 600px; margin-bottom: 20px">
+		<table id="spot-qs-table" class="widefat" style="max-width: 600px; margin-bottom: 10px">
 			<thead><tr><th>عملیات</th><th>در انتظار</th><th>در حال اجرا</th><th>خطا</th><th>تکمیل</th></tr></thead>
 			<tbody>
 				<tr>
 					<td>ایجاد سفارش</td>
-					<td><?= $qs['create']['pending'] ?></td>
-					<td><?= $qs['create']['running'] ?></td>
-					<td style="color:<?= $qs['create']['failed'] ? '#900' : 'inherit' ?>"><?= $qs['create']['failed'] ?></td>
-					<td><?= $qs['create']['complete'] ?></td>
+					<td id="spot-qs-create-pending"><?= $qs['create']['pending'] ?></td>
+					<td id="spot-qs-create-running"><?= $qs['create']['running'] ?></td>
+					<td id="spot-qs-create-failed" style="color:<?= $qs['create']['failed'] ? '#900' : 'inherit' ?>"><?= $qs['create']['failed'] ?></td>
+					<td id="spot-qs-create-complete"><?= $qs['create']['complete'] ?></td>
 				</tr>
 				<tr>
 					<td>غیرفعال‌سازی لایسنس</td>
-					<td><?= $qs['disable']['pending'] ?></td>
-					<td><?= $qs['disable']['running'] ?></td>
-					<td style="color:<?= $qs['disable']['failed'] ? '#900' : 'inherit' ?>"><?= $qs['disable']['failed'] ?></td>
-					<td><?= $qs['disable']['complete'] ?></td>
+					<td id="spot-qs-disable-pending"><?= $qs['disable']['pending'] ?></td>
+					<td id="spot-qs-disable-running"><?= $qs['disable']['running'] ?></td>
+					<td id="spot-qs-disable-failed" style="color:<?= $qs['disable']['failed'] ? '#900' : 'inherit' ?>"><?= $qs['disable']['failed'] ?></td>
+					<td id="spot-qs-disable-complete"><?= $qs['disable']['complete'] ?></td>
 				</tr>
 			</tbody>
 		</table>
-		<?php if ($has_activity) { ?>
-			<p><a href="<?= esc_url($as_url) ?>" target="_blank">مشاهده جزئیات در Action Scheduler ↗</a></p>
-		<?php } ?>
+		<p id="spot-qs-status" style="margin:6px 0 15px">
+			<?php if ($active_count > 0) { ?>
+				<span id="spot-qs-spinner">⏳ در حال پردازش — صفحه به‌روز می‌شود…</span>
+			<?php } else if ($has_any) { ?>
+				<a href="<?= esc_url($as_url) ?>" target="_blank">مشاهده جزئیات در Action Scheduler ↗</a>
+			<?php } ?>
+		</p>
 		<hr/>
+		<script>
+		(function () {
+			var nonce     = <?= json_encode($queue_nonce) ?>;
+			var ajaxurl   = <?= json_encode(admin_url('admin-ajax.php')) ?>;
+			var asUrl     = <?= json_encode(esc_url($as_url)) ?>;
+			var active    = <?= (int)$active_count ?>;
+			var timer     = null;
+
+			function cell(id) { return document.getElementById(id); }
+
+			function setCell(id, val) {
+				var el = cell(id);
+				if (!el) return;
+				el.textContent = val;
+				el.style.color = (id.indexOf('failed') !== -1 && val > 0) ? '#900' : '';
+			}
+
+			function updateStatus(data) {
+				var c = data.create, d = data.disable;
+				setCell('spot-qs-create-pending',   c.pending);
+				setCell('spot-qs-create-running',   c.running);
+				setCell('spot-qs-create-failed',    c.failed);
+				setCell('spot-qs-create-complete',  c.complete);
+				setCell('spot-qs-disable-pending',  d.pending);
+				setCell('spot-qs-disable-running',  d.running);
+				setCell('spot-qs-disable-failed',   d.failed);
+				setCell('spot-qs-disable-complete', d.complete);
+
+				var nowActive = c.pending + c.running + d.pending + d.running;
+				var status    = cell('spot-qs-status');
+				if (!status) return;
+
+				if (nowActive > 0) {
+					status.innerHTML = '<span id="spot-qs-spinner">⏳ در حال پردازش — صفحه به‌روز می‌شود…</span>';
+				} else if (active > 0) {
+					// was active, now done
+					var hasFailed = (c.failed + d.failed) > 0;
+					status.innerHTML = (hasFailed ? '⚠️ پردازش با برخی خطاها تکمیل شد. ' : '✅ پردازش با موفقیت تکمیل شد. ')
+						+ '<a href="' + asUrl + '" target="_blank">جزئیات در Action Scheduler ↗</a>';
+					clearInterval(timer);
+				} else {
+					status.innerHTML = '<a href="' + asUrl + '" target="_blank">مشاهده جزئیات در Action Scheduler ↗</a>';
+					clearInterval(timer);
+				}
+				active = nowActive;
+			}
+
+			function poll() {
+				var xhr = new XMLHttpRequest();
+				xhr.open('POST', ajaxurl);
+				xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+				xhr.onload = function () {
+					try {
+						var res = JSON.parse(xhr.responseText);
+						if (res.success) updateStatus(res.data);
+					} catch (e) {}
+				};
+				xhr.send('action=spot_queue_status&nonce=' + encodeURIComponent(nonce));
+			}
+
+			if (active > 0) timer = setInterval(poll, 5000);
+		})();
+		</script>
 	<?php } ?>
 
 	<h2>غیرفعال‌سازی دسته‌ای لایسنس‌های موجود از فایل اکسل/CSV</h2>

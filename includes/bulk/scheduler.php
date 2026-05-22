@@ -109,6 +109,14 @@ function spot_bulk_schedule_disable_licenses(string $csv_path): array {
 	return $result;
 }
 
+// ─── AJAX endpoint ───────────────────────────────────────────────────────────
+
+add_action('wp_ajax_spot_queue_status', function () {
+	if (!current_user_can('manage_options')) wp_die('', 403);
+	check_ajax_referer('spot_queue_status', 'nonce');
+	wp_send_json_success(spot_bulk_queue_status());
+});
+
 // ─── Queue status ─────────────────────────────────────────────────────────────
 
 function spot_bulk_queue_status(): array {
