@@ -58,7 +58,7 @@ add_action('woocommerce_process_shop_order_meta', 'spot_woo_admin_order_save', 1
 // ── License copy button in orders list ───────────────────────────────────────
 
 function spot_woo_orders_list_column($columns) {
-	$columns['spot_license'] = 'لایسنس اسپات پلیر';
+	$columns['spot_license'] = 'اسپات پلیر';
 	return $columns;
 }
 add_filter('manage_edit-shop_order_columns', 'spot_woo_orders_list_column');
@@ -71,6 +71,7 @@ function spot_woo_orders_list_column_content($column, $order_id) {
 	$data = $order->get_meta('_spotplayer_data');
 	if (empty($data['key'])) return;
 	echo '<button type="button" class="button spot-copy-key" data-key="' . esc_attr($data['key']) . '">کپی لایسنس</button>';
+	echo ' <a href="https://panel.spotplayer.ir/license/edit/' . esc_attr($data['_id']) . '" target="_blank" class="button">مشاهده در پنل ↗</a>';
 }
 add_action('manage_shop_order_posts_custom_column', 'spot_woo_orders_list_column_content', 10, 2);
 add_action('manage_woocommerce_page_wc-orders_custom_column', 'spot_woo_orders_list_column_content', 10, 2);

@@ -10,6 +10,9 @@ function spot_admin_order_box($data) {
 			<td>شناسه:</td>
 			<td>
 				<input type="text" class="ltr" name="spot-id" value="<?= esc_attr(@$data['_id']) ?>" <?= $disable ?>/>
+				<?php if ($disable && @$data['_id']) { ?>
+					<a href="https://panel.spotplayer.ir/license/edit/<?= esc_attr($data['_id']) ?>" target="_blank" class="button button-small" style="margin-right:6px">مشاهده در پنل ↗</a>
+				<?php } ?>
 				<?php if (!$disable) { ?>
 					<button type="submit" name="spot-retrieve" value="1">دریافت اطلاعات لایسنس با شناسه</button>
 				<?php } ?>
