@@ -45,7 +45,7 @@ function spot_woo_order_license_request(WC_Order $ord, $admin = false): ?array {
 			? ' <a target="_blank" href="' . parse_url(get_home_url(), PHP_URL_PATH) . '/spdeb?id=' . $ord->get_id() . '">اطلاعات دیباگ</a>'
 			: ' <a target="_blank" href="https://spotplayer.ir/help/api/wordpress">راهنما</a>';
 		$ord->add_order_note($err . $extra);
-		spot_admin_notice($err . $extra . ' — <a href="' . get_edit_post_link($ord->get_id()) . '">سفارش ' . $ord->get_id() . '</a>');
+		spot_admin_notice($err . $extra . ' — <a href="' . $ord->get_edit_order_url() . '">سفارش ' . $ord->get_id() . '</a>');
 		throw new Exception($err);
 	}
 }
