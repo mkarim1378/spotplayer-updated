@@ -95,12 +95,12 @@ function spot_auto_license_on_processing($order_id): void {
 	if (@get_option('spotplayer')['completed']) return;
 	$order = wc_get_order($order_id);
 	if (!$order || @spot_woo_license_data($order)['_id'] || !count(spot_woo_order_items($order))) return;
-	spot_schedule_license_async($order_id);
+	try { spot_woo_order_license_request($order); } catch (Exception $e) {}
 }
 
 add_action('woocommerce_order_status_completed', 'spot_auto_license_on_completed', 10, 1);
 function spot_auto_license_on_completed($order_id): void {
 	$order = wc_get_order($order_id);
 	if (!$order || @spot_woo_license_data($order)['_id'] || !count(spot_woo_order_items($order))) return;
-	spot_schedule_license_async($order_id);
+	try { spot_woo_order_license_request($order); } catch (Exception $e) {}
 }

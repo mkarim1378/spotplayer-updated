@@ -3,7 +3,8 @@
 ## [22.0] - 1404-03-02
 
 ### رفع باگ
-- **ایجاد خودکار لایسنس هنگام تکمیل سفارش**: guard check در `spot_auto_license_on_completed`، `spot_auto_license_on_processing` و `spot_run_license_async` از `get_meta('_spotplayer_data')` به بررسی دقیق `_id` تغییر کرد — قبلاً اگه داده جزئی (بدون `_id`) از یک تلاش ناموفق در متا ذخیره شده بود، تابع زود خارج می‌شد و لایسنس هیچ‌وقت ساخته نمی‌شد
+- **ایجاد خودکار لایسنس هنگام تغییر وضعیت سفارش**: hook‌های `woocommerce_order_status_processing` و `woocommerce_order_status_completed` اکنون مستقیماً (synchronous) API را صدا می‌زنند — قبلاً فقط یک async job schedule می‌شد که به WP Cron یا Action Scheduler وابسته بود؛ اگه این مکانیزم‌ها فعال نبودند، لایسنس هیچ‌وقت به صورت خودکار ساخته نمی‌شد و نیاز به کلیک دستی داشت. async از طریق `spot_woo_shop_order` به عنوان fallback باقی مانده
+- **guard check دقیق‌تر**: بررسی وجود لایسنس از `get_meta('_spotplayer_data')` به `@spot_woo_license_data($order)['_id']` تغییر کرد تا داده‌های جزئی بدون `_id` مانع ایجاد لایسنس نشوند
 
 ---
 
