@@ -78,7 +78,7 @@ function spot_schedule_license_async(int $order_id): void {
 add_action('spot_run_license_async', 'spot_run_license_async');
 function spot_run_license_async($order_id): void {
 	$order = wc_get_order($order_id);
-	if (!$order || $order->get_meta('_spotplayer_data')) return;
+	if (!$order || @spot_woo_license_data($order)['_id']) return;
 	try {
 		$result = spot_woo_order_license_request($order, true);
 		if (is_array($result) && !empty($result['_id']))
@@ -94,13 +94,13 @@ add_action('woocommerce_order_status_processing', 'spot_auto_license_on_processi
 function spot_auto_license_on_processing($order_id): void {
 	if (@get_option('spotplayer')['completed']) return;
 	$order = wc_get_order($order_id);
-	if (!$order || $order->get_meta('_spotplayer_data') || !count(spot_woo_order_items($order))) return;
+	if (!$order || @spot_woo_license_data($order)['_id'] || !count(spot_woo_order_items($order))) return;
 	spot_schedule_license_async($order_id);
 }
 
 add_action('woocommerce_order_status_completed', 'spot_auto_license_on_completed', 10, 1);
 function spot_auto_license_on_completed($order_id): void {
 	$order = wc_get_order($order_id);
-	if (!$order || $order->get_meta('_spotplayer_data') || !count(spot_woo_order_items($order))) return;
+	if (!$order || @spot_woo_license_data($order)['_id'] || !count(spot_woo_order_items($order))) return;
 	spot_schedule_license_async($order_id);
 }
