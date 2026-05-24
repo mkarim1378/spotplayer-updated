@@ -8,7 +8,8 @@ function spot_woo_admin_order() {
 add_action('add_meta_boxes', 'spot_woo_admin_order');
 
 function spot_woo_admin_order_box() {
-	spot_admin_order_box(spot_woo_license_data(wc_get_order()));
+	$order = wc_get_order();
+	spot_admin_order_box(spot_woo_license_data($order), $order);
 }
 
 function spot_woo_admin_order_save(int $oid) {

@@ -102,5 +102,34 @@ add_action('woocommerce_order_status_completed', 'spot_auto_license_on_completed
 function spot_auto_license_on_completed($order_id): void {
 	$order = wc_get_order($order_id);
 	if (!$order || @spot_woo_license_data($order)['_id'] || !count(spot_woo_order_items($order))) return;
-	try { spot_woo_order_license_request($order); } catch (Exception $e) {}
+	try { spot_woo_order_license_request($order); } catch (Exception $e) { /* AJAX fallback handles this */ }
+}
+
+// ── AJAX auto-create (admin order box + customer order page fallback) ─────────
+
+add_action('wp_ajax_spot_auto_create',        'spot_ajax_auto_create');
+add_action('wp_ajax_nopriv_spot_auto_create', 'spot_ajax_auto_create');
+function spot_ajax_auto_create(): void {
+	$order_id = intval($_POST['order_id'] ?? 0);
+	if (!wp_verify_nonce(sanitize_text_field($_POST['nonce'] ?? ''), 'spot_auto_create_' . $order_id))
+		wp_send_json_error('nonce');
+
+	$order = wc_get_order($order_id);
+	if (!$order) wp_send_json_error('not_found');
+
+	$uid         = get_current_user_id();
+	$is_admin    = current_user_can('manage_woocommerce');
+	$is_customer = $uid && (int) $order->get_customer_id() === $uid;
+	$is_guest    = !$uid && $order->get_order_key() === sanitize_text_field($_POST['order_key'] ?? '');
+	if (!$is_admin && !$is_customer && !$is_guest) wp_send_json_error('unauthorized');
+
+	if (@spot_woo_license_data($order)['_id']) wp_send_json_success(['status' => 'exists']);
+	if (!count(spot_woo_order_items($order)))  wp_send_json_error('no_courses');
+
+	try {
+		spot_woo_order_license_request($order, true);
+		wp_send_json_success(['status' => 'created']);
+	} catch (Exception $e) {
+		wp_send_json_error($e->getMessage());
+	}
 }

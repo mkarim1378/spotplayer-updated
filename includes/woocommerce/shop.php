@@ -27,13 +27,35 @@ function spot_woo_shop_order(WC_Order $ord) {
 		return;
 	}
 
-	// License not ready yet — ensure background job is queued, then show pending UI
-	spot_schedule_license_async($ord->get_id()); ?>
+	// License not ready yet — trigger creation via AJAX (no page-blocking, no WP-Cron dependency)
+	$_spot_nonce = wp_create_nonce('spot_auto_create_' . $ord->get_id()); ?>
 	<div id="spot_pending">
 		<div class="spot_pending_spinner"></div>
 		<p>لایسنس شما در حال آماده‌سازی است، لطفاً چند لحظه صبر کنید...</p>
 	</div>
-	<script>setTimeout(function () { window.location.reload(); }, 5000);</script>
+	<script>(function(){
+		var ajax=<?= json_encode(admin_url('admin-ajax.php')) ?>,
+			oid=<?= (int) $ord->get_id() ?>,
+			key=<?= json_encode($ord->get_order_key()) ?>,
+			nonce=<?= json_encode($_spot_nonce) ?>,
+			n=0;
+		function go(){
+			var fd=new FormData();
+			fd.append('action','spot_auto_create');
+			fd.append('order_id',oid);
+			fd.append('nonce',nonce);
+			fd.append('order_key',key);
+			fetch(ajax,{method:'POST',body:fd})
+				.then(function(r){return r.json()})
+				.then(function(res){
+					if(res.success)location.reload();
+					else if(++n<5)setTimeout(go,5000);
+					else document.getElementById('spot_pending').innerHTML='<p>در ایجاد لایسنس مشکلی پیش آمد. لطفاً با پشتیبانی تماس بگیرید.</p>';
+				})
+				.catch(function(){if(++n<5)setTimeout(go,5000)});
+		}
+		go();
+	})();</script>
 	<?php
 }
 add_action('woocommerce_order_details_before_order_table', 'spot_woo_shop_order');
