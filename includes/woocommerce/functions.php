@@ -63,32 +63,6 @@ function spot_woo_license_data_eval(?WC_Order $order): ?array { // dont rename $
 	return eval('return ' . spot_license_code() . ';');
 }
 
-// ── Background license creation ───────────────────────────────────────────────
-
-function spot_schedule_license_async(int $order_id): void {
-	if (function_exists('as_enqueue_async_action')) {
-		if (!as_has_scheduled_action('spot_run_license_async', ['order_id' => $order_id], 'spotplayer'))
-			as_enqueue_async_action('spot_run_license_async', ['order_id' => $order_id], 'spotplayer');
-	} else {
-		if (!wp_next_scheduled('spot_run_license_async', [$order_id]))
-			wp_schedule_single_event(time(), 'spot_run_license_async', [$order_id]);
-	}
-}
-
-add_action('spot_run_license_async', 'spot_run_license_async');
-function spot_run_license_async($order_id): void {
-	$order = wc_get_order($order_id);
-	if (!$order || @spot_woo_license_data($order)['_id']) return;
-	try {
-		$result = spot_woo_order_license_request($order, true);
-		if (is_array($result) && !empty($result['_id']))
-			$order->add_order_note('✅ لایسنس اسپات پلیر به صورت خودکار ساخته شد. شناسه: ' . $result['_id']);
-		else
-			$order->add_order_note('⚠️ تلاش خودکار برای ساخت لایسنس انجام شد ولی موفق نبود.');
-	} catch (Exception $e) {
-		$order->add_order_note('❌ خطا در ایجاد خودکار لایسنس: ' . $e->getMessage());
-	}
-}
 
 add_action('woocommerce_order_status_processing', 'spot_auto_license_on_processing', 10, 1);
 function spot_auto_license_on_processing($order_id): void {

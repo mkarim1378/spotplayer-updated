@@ -1,5 +1,13 @@
 # تاریخچه تغییرات افزونه اسپات پلیر
 
+## [22.4] - 1404-03-03
+
+### حذف کد قدیمی
+- **`spot_schedule_license_async` و `spot_run_license_async`** حذف شدند — از v22.2 به بعد هیچ caller‌ای نداشتند؛ AJAX endpoint جایگزین شده
+- **`spot_edd_admin_payment_save`** از `edd/admin.php` حذف شد — چون `spot_admin_order_box` دیگه nonce field ندارد، این handler هیچ‌وقت از چک nonce رد نمی‌شد
+
+---
+
 ## [22.3] - 1404-03-03
 
 ### بازطراحی UI
