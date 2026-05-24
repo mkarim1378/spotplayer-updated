@@ -41,6 +41,9 @@ require_once SPOTPLAYER_DIR . 'includes/bulk/create-orders.php';
 require_once SPOTPLAYER_DIR . 'includes/bulk/manage-licenses.php';
 require_once SPOTPLAYER_DIR . 'includes/bulk/scheduler.php';
 
+// Admin dashboard widget
+require_once SPOTPLAYER_DIR . 'includes/admin/dashboard-widget.php';
+
 // Admin settings page (loaded last — depends on all modules above)
 require_once SPOTPLAYER_DIR . 'includes/admin/settings.php';
 
