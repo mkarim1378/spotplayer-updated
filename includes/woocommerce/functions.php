@@ -106,7 +106,7 @@ function spot_ajax_auto_create(): void {
 	if (!$is_admin && !$is_customer && !$is_guest) wp_send_json_error('unauthorized');
 
 	if (@spot_woo_license_data($order)['_id']) wp_send_json_success(['status' => 'exists']);
-	if ($order->get_meta('_spot_fatal_error'))  wp_send_json_error('fatal_error');
+	if (($fe = $order->get_meta('_spot_fatal_error'))) wp_send_json_error(['fatal' => true, 'message' => $fe]);
 	if (!count(spot_woo_order_items($order)))  wp_send_json_error('no_courses');
 
 	try {

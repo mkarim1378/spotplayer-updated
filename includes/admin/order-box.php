@@ -42,16 +42,20 @@ function spot_admin_order_box($data, $order = null) {
 					.then(function(r){return r.json()})
 					.then(function(res){
 						if(res.success){location.reload()}
-						else{showErr(res.data||'خطای نامشخص')}
+						else{
+							var isFatal=res.data&&typeof res.data==='object'&&res.data.fatal;
+							showErr(isFatal?res.data.message:(res.data||'خطای نامشخص'),isFatal);
+						}
 					})
-					.catch(function(){showErr('خطا در ارتباط با سرور')});
+					.catch(function(){showErr('خطا در ارتباط با سرور',false)});
 			}
 
-			function showErr(msg){
+			function showErr(msg,noRetry){
 				document.getElementById('spot-spin').style.display='none';
 				document.getElementById('spot-msg').style.display='none';
 				document.getElementById('spot-err-txt').textContent=msg;
 				document.getElementById('spot-err').style.display='block';
+				if(noRetry)document.getElementById('spot-retry').style.display='none';
 			}
 
 			document.getElementById('spot-retry').addEventListener('click',go);
@@ -62,8 +66,10 @@ function spot_admin_order_box($data, $order = null) {
 
 	// ── حالت ۱.۵: خطای غیرقابل تلاش مجدد ──────────────────────────────────────
 	if ($fatal_error) { ?>
-		<p style="color:#c00;font-size:12px;margin:0 0 4px"><b>خطا:</b> <?= esc_html($fatal_error) ?></p>
-		<p style="color:#888;font-size:11px;margin:0">این خطا نیاز به بررسی دستی دارد.</p>
+		<p style="color:#c00;font-size:12px;margin:0 0 4px">
+			<b>ایجاد لایسنس ناموفق بود:</b><br><?= esc_html($fatal_error) ?>
+		</p>
+		<p style="color:#888;font-size:11px;margin:0">برای رفع مشکل با پشتیبانی فنی تماس بگیرید.</p>
 	<?php return; }
 
 	// ── حالت ۲: لایسنس موجود است ─────────────────────────────────────────────
