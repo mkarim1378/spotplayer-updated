@@ -139,8 +139,12 @@ function spot_admin_page() {
 		<h2>🔑 اتصال به اسپات پلیر</h2>
 		<div class="sp-field">
 			<label>کلید API</label>
-			<input type="text" name="spotplayer[api]" value="<?= esc_attr(@$sp['api']) ?>" required pattern="^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$">
+			<input type="text" name="spotplayer[api]" id="spot-api-key" value="<?= esc_attr(@$sp['api']) ?>" required pattern="^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$">
 			<p class="description" style="margin-top:4px">کلید API از داشبورد اسپات پلیر. <span class="sp-warn" style="display:inline">تغییر رمز عبور اسپات پلیر، کلید API را هم تغییر می‌دهد.</span></p>
+			<p style="margin-top:8px">
+				<button type="button" id="spot-test-api-btn" class="button">تست اتصال</button>
+				<span id="spot-test-api-result" style="margin-right:10px;font-size:13px"></span>
+			</p>
 		</div>
 		<div class="sp-field">
 			<label>دامنه ریبرندینگ <span style="font-weight:normal;color:#646970">(اختیاری)</span></label>
@@ -260,6 +264,30 @@ function spot_admin_page() {
 			<?php submit_button('ذخیره لیست دوره‌ها', 'primary', 'spot_courses_submit', false) ?>
 		</form>
 	</div>
+	<script>(function(){
+		var btn    = document.getElementById('spot-test-api-btn');
+		var result = document.getElementById('spot-test-api-result');
+		btn.addEventListener('click', function(){
+			var api = document.getElementById('spot-api-key').value.trim();
+			if (!api) { result.style.color='#c00'; result.textContent='ابتدا کلید API را وارد کنید.'; return; }
+			btn.disabled = true;
+			result.style.color = '#646970';
+			result.textContent = '…';
+			var fd = new FormData();
+			fd.append('action', 'spot_test_api');
+			fd.append('nonce',  <?= json_encode(wp_create_nonce('spot_test_api')) ?>);
+			fd.append('api',    api);
+			fetch(<?= json_encode(admin_url('admin-ajax.php')) ?>, {method:'POST', body:fd})
+				.then(function(r){ return r.json(); })
+				.then(function(res){
+					result.style.color = res.success ? '#2a7a2a' : '#c00';
+					result.textContent = (res.success ? '✅ ' : '❌ ') + (typeof res.data === 'string' ? res.data : '');
+				})
+				.catch(function(){ result.style.color='#c00'; result.textContent='❌ خطا در ارتباط با سرور'; })
+				.finally(function(){ btn.disabled = false; });
+		});
+	})();</script>
+
 	<script>(function(){
 		var tbody   = document.getElementById('spot-courses-tbody');
 		var counter = <?= count($saved_courses) ?>;

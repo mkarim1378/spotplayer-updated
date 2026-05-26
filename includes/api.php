@@ -34,6 +34,32 @@ function spot_request_license_get($id) {
 	return spot_request('https://panel.spotplayer.ir/license/edit/' . $id . '?d=1');
 }
 
+add_action('wp_ajax_spot_test_api', 'spot_ajax_test_api');
+function spot_ajax_test_api(): void {
+	if (!current_user_can('manage_options')) wp_send_json_error('unauthorized');
+	check_ajax_referer('spot_test_api', 'nonce');
+
+	$api = sanitize_text_field($_POST['api'] ?? '');
+	if (!$api) { wp_send_json_error('کلید API وارد نشده است.'); return; }
+
+	$ca_bundle = ABSPATH . WPINC . '/certificates/ca-bundle.crt';
+	try {
+		$body = Requests::request(
+			'https://panel.spotplayer.ir/license/edit/000000000000000000000000?d=1',
+			['Content-Type' => 'application/json', '$Level' => '-1', '$API' => $api, 'X-WpSpot' => 12],
+			[],
+			'GET',
+			['verify' => file_exists($ca_bundle) ? $ca_bundle : true]
+		)->body;
+		$rep = json_decode($body, true);
+		if (!is_array($rep)) { wp_send_json_error('پاسخ نامفهوم از سرور اسپات پلیر.'); return; }
+		// Any valid JSON from SpotPlayer means the key is authenticated
+		wp_send_json_success('اتصال به اسپات پلیر برقرار است.');
+	} catch (Exception $e) {
+		wp_send_json_error('خطا در اتصال: ' . $e->getMessage());
+	}
+}
+
 /** @throws Exception */
 function spot_request_license_put($j) {
 	if (!$j['name']) throw new Exception('نام لایسنس خالی بود.', 999);
