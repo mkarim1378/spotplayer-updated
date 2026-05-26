@@ -65,7 +65,6 @@ function spot_admin_order_box($data, $order = null) {
 		<p style="color:#c00;font-size:12px;margin:0 0 4px">
 			<b>ایجاد لایسنس ناموفق بود:</b><br><?= esc_html($fatal_error) ?>
 		</p>
-		<p style="color:#888;font-size:11px;margin:0">برای رفع مشکل با پشتیبانی فنی تماس بگیرید.</p>
 	<?php return; }
 
 	// ── حالت ۲: لایسنس موجود است ─────────────────────────────────────────────
