@@ -26,6 +26,19 @@ function spot_admin_page() {
 
 	$use_async = function_exists('as_schedule_single_action');
 
+	// پردازش فرم مدیریت دوره‌ها
+	if (isset($_POST['spot_save_courses']) && check_admin_referer('spot_save_courses', 'spot_courses_nonce')) {
+		$courses = [];
+		foreach ((array)($_POST['spot_courses'] ?? []) as $row) {
+			$id   = sanitize_text_field($row['id']   ?? '');
+			$name = sanitize_text_field($row['name'] ?? '');
+			if (preg_match('/^[0-9a-f]{24}$/i', $id) && $name !== '')
+				$courses[] = ['id' => $id, 'name' => $name];
+		}
+		update_option('spot_courses', $courses);
+		echo '<div class="updated"><p>✅ لیست دوره‌های اسپات پلیر ذخیره شد.</p></div>';
+	}
+
 	// پردازش فرم ایجاد سفارش دسته‌ای (۳ ستونه)
 	if (isset($_POST['bulk_product_id']) && isset($_FILES['bulk_excel']) && check_admin_referer('spotplayer_bulk_license', 'spotplayer_bulk_license_nonce')) {
 		$product_id = intval($_POST['bulk_product_id']);
@@ -108,6 +121,12 @@ function spot_admin_page() {
 	.sp-warn { color:#9e2a2a; font-size:12px; margin-top:3px; }
 	.sp-shortcode { background:#f0f6fc; border:1px solid #c3defa; border-radius:4px; padding:10px 16px; margin-bottom:20px; max-width:800px; font-size:13px; }
 	.sp-shortcode code { background:#dde8f7; padding:2px 6px; border-radius:3px; }
+	.sp-courses-table { width:100%; border-collapse:collapse; margin-bottom:12px; }
+	.sp-courses-table th { text-align:right; padding:6px 8px; background:#f6f7f7; border-bottom:1px solid #dcdcde; font-size:12px; font-weight:600; }
+	.sp-courses-table td { padding:5px 8px; border-bottom:1px solid #f0f0f1; vertical-align:middle; }
+	.sp-courses-table td input[type=text] { width:100%; margin:0; }
+	.sp-courses-table .sp-id-col input { font-family:monospace; direction:ltr; font-size:12px; }
+	.sp-courses-table .spot-remove-row { color:#c00; border-color:#c00; padding:2px 8px; min-height:0; height:26px; line-height:24px; }
 	</style>
 
 	<div id="sp-settings" class="wrap">
@@ -212,6 +231,52 @@ function spot_admin_page() {
 	</form>
 
 	<hr style="max-width:800px;margin:0 0 20px"/>
+
+	<?php $saved_courses = get_option('spot_courses', []); ?>
+	<div class="sp-card">
+		<h2>📚 دوره‌های اسپات پلیر</h2>
+		<p style="margin-top:0;color:#646970;font-size:13px">دوره‌هایی که می‌خواهید به محصولات ووکامرس متصل کنید را اینجا تعریف کنید. پس از ذخیره، این دوره‌ها در صفحه ویرایش محصول به صورت dropdown قابل انتخاب خواهند بود.</p>
+		<form method="post">
+			<?php wp_nonce_field('spot_save_courses', 'spot_courses_nonce') ?>
+			<input type="hidden" name="spot_save_courses" value="1">
+			<table class="sp-courses-table">
+				<thead><tr>
+					<th style="width:45%">نام دوره</th>
+					<th class="sp-id-col" style="width:48%">شناسه دوره (۲۴ کاراکتر هگز از پنل اسپات)</th>
+					<th style="width:7%"></th>
+				</tr></thead>
+				<tbody id="spot-courses-tbody">
+				<?php foreach ($saved_courses as $idx => $course) { ?>
+					<tr>
+						<td><input type="text" name="spot_courses[<?= $idx ?>][name]" value="<?= esc_attr($course['name']) ?>" placeholder="مثلاً: دوره پایتون" required></td>
+						<td class="sp-id-col"><input type="text" name="spot_courses[<?= $idx ?>][id]" value="<?= esc_attr($course['id']) ?>" placeholder="5d2ee35bcddc092a304ae5eb" pattern="[0-9a-fA-F]{24}" required></td>
+						<td><button type="button" class="button spot-remove-row">✕</button></td>
+					</tr>
+				<?php } ?>
+				</tbody>
+			</table>
+			<button type="button" id="spot-add-course" class="button">+ افزودن دوره</button>
+			&nbsp;&nbsp;
+			<?php submit_button('ذخیره لیست دوره‌ها', 'primary', 'spot_courses_submit', false) ?>
+		</form>
+	</div>
+	<script>(function(){
+		var tbody   = document.getElementById('spot-courses-tbody');
+		var counter = <?= count($saved_courses) ?>;
+		function bindRemove(btn){ btn.addEventListener('click', function(){ btn.closest('tr').remove(); }); }
+		tbody.querySelectorAll('.spot-remove-row').forEach(bindRemove);
+		document.getElementById('spot-add-course').addEventListener('click', function(){
+			var tr = document.createElement('tr');
+			tr.innerHTML =
+				'<td><input type="text" name="spot_courses[' + counter + '][name]" placeholder="مثلاً: دوره پایتون" required></td>'
+				+ '<td class="sp-id-col"><input type="text" name="spot_courses[' + counter + '][id]" placeholder="5d2ee35bcddc092a304ae5eb" pattern="[0-9a-fA-F]{24}" required></td>'
+				+ '<td><button type="button" class="button spot-remove-row">✕</button></td>';
+			tbody.appendChild(tr);
+			bindRemove(tr.querySelector('.spot-remove-row'));
+			tr.querySelector('input').focus();
+			counter++;
+		});
+	})();</script>
 
 	<?php if ($use_async) {
 		$qs           = spot_bulk_queue_status();
