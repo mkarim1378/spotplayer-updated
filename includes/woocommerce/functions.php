@@ -50,7 +50,7 @@ function spot_woo_order_license_request(WC_Order $ord, $admin = false): ?array {
 			$ord->update_meta_data('_spot_fatal_error', $ex->getMessage());
 			$ord->save_meta_data();
 		}
-		throw new Exception($err);
+		throw new Exception($ex->getMessage(), $ex->getCode());
 	}
 }
 
@@ -106,7 +106,7 @@ function spot_ajax_auto_create(): void {
 	if (!$is_admin && !$is_customer && !$is_guest) wp_send_json_error('unauthorized');
 
 	if (@spot_woo_license_data($order)['_id']) wp_send_json_success(['status' => 'exists']);
-	if (($fe = $order->get_meta('_spot_fatal_error'))) wp_send_json_error(['fatal' => true, 'message' => $fe]);
+	if ($order->get_meta('_spot_fatal_error')) wp_send_json_error('reload');
 	if (!count(spot_woo_order_items($order)))  wp_send_json_error('no_courses');
 
 	try {

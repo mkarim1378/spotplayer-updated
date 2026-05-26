@@ -41,21 +41,17 @@ function spot_admin_order_box($data, $order = null) {
 				fetch(ajax,{method:'POST',body:fd})
 					.then(function(r){return r.json()})
 					.then(function(res){
-						if(res.success){location.reload()}
-						else{
-							var isFatal=res.data&&typeof res.data==='object'&&res.data.fatal;
-							showErr(isFatal?res.data.message:(res.data||'خطای نامشخص'),isFatal);
-						}
+						if(res.success||res.data==='reload'){location.reload()}
+						else{showErr(typeof res.data==='string'?res.data:'خطای نامشخص')}
 					})
-					.catch(function(){showErr('خطا در ارتباط با سرور',false)});
+					.catch(function(){showErr('خطا در ارتباط با سرور')});
 			}
 
-			function showErr(msg,noRetry){
+			function showErr(msg){
 				document.getElementById('spot-spin').style.display='none';
 				document.getElementById('spot-msg').style.display='none';
 				document.getElementById('spot-err-txt').textContent=msg;
 				document.getElementById('spot-err').style.display='block';
-				if(noRetry)document.getElementById('spot-retry').style.display='none';
 			}
 
 			document.getElementById('spot-retry').addEventListener('click',go);
