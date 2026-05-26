@@ -6,7 +6,9 @@ function spot_admin_order_box($data, $order = null) {
 	$status  = $order ? $order->get_status() : '';
 	$has_id  = !empty($data['_id']);
 
-	$auto_create = !$has_id && $order && (
+	$fatal_error = $order ? $order->get_meta('_spot_fatal_error') : '';
+
+	$auto_create = !$has_id && !$fatal_error && $order && (
 		$status === 'completed' ||
 		($status === 'processing' && !@$sp['completed'])
 	);
@@ -57,6 +59,12 @@ function spot_admin_order_box($data, $order = null) {
 		})();</script>
 		<?php return;
 	}
+
+	// ── حالت ۱.۵: خطای غیرقابل تلاش مجدد ──────────────────────────────────────
+	if ($fatal_error) { ?>
+		<p style="color:#c00;font-size:12px;margin:0 0 4px"><b>خطا:</b> <?= esc_html($fatal_error) ?></p>
+		<p style="color:#888;font-size:11px;margin:0">این خطا نیاز به بررسی دستی دارد.</p>
+	<?php return; }
 
 	// ── حالت ۲: لایسنس موجود است ─────────────────────────────────────────────
 	if ($has_id) {

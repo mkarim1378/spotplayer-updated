@@ -46,8 +46,16 @@ function spot_woo_order_license_request(WC_Order $ord, $admin = false): ?array {
 			: ' <a target="_blank" href="https://spotplayer.ir/help/api/wordpress">راهنما</a>';
 		$ord->add_order_note($err . $extra);
 		spot_admin_notice($err . $extra . ' — <a href="' . $ord->get_edit_order_url() . '">سفارش ' . $ord->get_id() . '</a>');
+		if (spot_is_fatal_license_error($ex->getMessage())) {
+			$ord->update_meta_data('_spot_fatal_error', $ex->getMessage());
+			$ord->save_meta_data();
+		}
 		throw new Exception($err);
 	}
+}
+
+function spot_is_fatal_license_error(string $msg): bool {
+	return mb_strpos($msg, 'واترمارک') !== false && mb_strpos($msg, 'قبلا') !== false;
 }
 
 function spot_woo_license_data(WC_Order $ord): array { // dont rename $order, used in eval code
@@ -98,6 +106,7 @@ function spot_ajax_auto_create(): void {
 	if (!$is_admin && !$is_customer && !$is_guest) wp_send_json_error('unauthorized');
 
 	if (@spot_woo_license_data($order)['_id']) wp_send_json_success(['status' => 'exists']);
+	if ($order->get_meta('_spot_fatal_error'))  wp_send_json_error('fatal_error');
 	if (!count(spot_woo_order_items($order)))  wp_send_json_error('no_courses');
 
 	try {
