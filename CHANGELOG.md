@@ -1,5 +1,12 @@
 # تاریخچه تغییرات افزونه اسپات پلیر
 
+## [22.8] - 1404-03-17
+
+### زیرساخت جدید
+- **هسته ارسال پیامک (`includes/sms.php`)**: فایل جدید با توابع پایه‌ای ارسال پیامک از طریق Payamito REST API — شامل `spot_sms_send_raw`، `spot_sms_normalize_phone`، `spot_sms_build_message`، `spot_sms_is_enabled` و AJAX handler دکمه «ارسال آزمایشی» در تنظیمات.
+
+---
+
 ## [22.7] - 1404-03-05
 
 ### فیچر جدید
