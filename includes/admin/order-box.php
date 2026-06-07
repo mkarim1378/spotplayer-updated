@@ -90,7 +90,12 @@ function spot_admin_order_box($data, $order = null) {
 				navigator.clipboard?navigator.clipboard.writeText(key).then(done).catch(function(){legacy();done();}):done(legacy());
 			});
 		})();</script>
-		<?php return;
+		<?php
+
+		// ── وضعیت پیامک ──────────────────────────────────────────────────────
+		if ($order) spot_sms_admin_section($order, $order->get_id(), 'woo');
+
+		return;
 	}
 
 	// ── حالت ۳: لایسنس ندارد (وضعیت‌های دیگر) ───────────────────────────────

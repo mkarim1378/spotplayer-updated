@@ -22,6 +22,7 @@ function spot_edd_payment_license_request(EDD_Payment $pay, $admin = false): ?ar
 		if (!($id = @$rep['_id'])) throw new Exception('پاسخ نامعتبر از سرور', 999);
 		$pay->update_meta('_spot_data', $data = array_merge($data, $rep));
 		edd_insert_payment_note($pay->ID, sprintf('لایسنس  با شناسه %s برای این سفارش ایجاد شد.', '<a href="https://panel.spotplayer.ir/license/edit/' . $id . '" target="_blank">' . $id . '</a>'));
+		spot_sms_trigger_edd($pay);
 		return $data;
 
 	} catch (Exception $ex) {

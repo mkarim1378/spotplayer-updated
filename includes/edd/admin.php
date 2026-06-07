@@ -17,10 +17,16 @@ function spot_edd_admin_dl_save($dl_id) {
 }
 add_action('edd_save_download', 'spot_edd_admin_dl_save', 10, 2);
 
-function spot_edd_admin_payment_box(int $pid) { ?>
+function spot_edd_admin_payment_box(int $pid) {
+	$pay = edd_get_payment($pid); ?>
 	<div id="sp-order" class="postbox">
 		<h3 class="hndle"><span>اطلاعات اسپات پلیر</span></h3>
-		<div class="inside edd-clearfix"><?php spot_admin_order_box(spot_edd_license_data(edd_get_payment($pid))) ?></div>
+		<div class="inside edd-clearfix">
+			<?php
+			spot_admin_order_box(spot_edd_license_data($pay));
+			spot_sms_admin_section($pay, $pay->ID, 'edd');
+			?>
+		</div>
 	</div>
 <?php }
 add_action('edd_view_order_details_main_before', 'spot_edd_admin_payment_box', 10, 1);

@@ -36,6 +36,7 @@ function spot_woo_order_license_request(WC_Order $ord, $admin = false): ?array {
 		$ord->update_meta_data('_spotplayer_data', $data = array_merge($data, $rep));
 		$ord->save_meta_data();
 		$ord->add_order_note(sprintf('لایسنس با شناسه %s برای این سفارش ایجاد شد.', '<a href="https://panel.spotplayer.ir/license/edit/' . $id . '" target="_blank">' . $id . '</a>'));
+		spot_sms_trigger_woo($ord);
 		return $data;
 
 	} catch (Exception $ex) {
