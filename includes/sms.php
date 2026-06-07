@@ -1,6 +1,8 @@
 <?php
 if (!defined('ABSPATH')) exit;
 
+define('SPOT_SMS_MAX_ATTEMPTS', 8);
+
 function spot_sms_is_enabled(): bool {
 	$sp = get_option('spotplayer', []);
 	return !empty($sp['sms_enabled'])
@@ -242,7 +244,7 @@ function spot_sms_schedule_msg2(int $order_id, string $platform, int $attempt, i
 }
 
 function spot_sms_retry_delay(int $failed_attempt): int {
-	return $failed_attempt <= 2 ? 120 : 300;
+	return $failed_attempt < 5 ? 120 : 300;
 }
 
 function spot_sms_cancel_pending_for_order(int $order_id): void {
@@ -285,8 +287,15 @@ function spot_sms_handle_msg1(int $order_id, string $platform, int $attempt): vo
 		return;
 	}
 
+	if ($attempt >= SPOT_SMS_MAX_ATTEMPTS) {
+		$order->update_meta_data('_spot_sms_msg1_status', 'abandoned');
+		$order->save_meta_data();
+		$order->add_order_note('🛑 ارسال پیامک لایسنس پس از ' . $attempt . ' بار تلاش متوقف شد.');
+		return;
+	}
+
 	if ($attempt === 5)
-		$order->add_order_note('⚠️ ارسال پیامک لایسنس پس از ۵ بار تلاش ناموفق بود. هر ۵ دقیقه مجدداً تلاش می‌شود. تنظیمات پیامک را بررسی کنید.');
+		$order->add_order_note('⚠️ ارسال پیامک لایسنس پس از ۵ بار تلاش ناموفق بود. هر ۵ دقیقه مجدداً تلاش می‌شود.');
 
 	spot_sms_schedule_msg1($order_id, $platform, $attempt + 1, spot_sms_retry_delay($attempt));
 }
@@ -309,8 +318,14 @@ function spot_sms_do_msg1_edd(EDD_Payment $pay, int $order_id, string $platform,
 		return;
 	}
 
+	if ($attempt >= SPOT_SMS_MAX_ATTEMPTS) {
+		$pay->update_meta('_spot_sms_msg1_status', 'abandoned');
+		edd_insert_payment_note($pay->ID, '🛑 ارسال پیامک لایسنس پس از ' . $attempt . ' بار تلاش متوقف شد.');
+		return;
+	}
+
 	if ($attempt === 5)
-		edd_insert_payment_note($pay->ID, '⚠️ ارسال پیامک لایسنس پس از ۵ بار تلاش ناموفق بود. هر ۵ دقیقه مجدداً تلاش می‌شود. تنظیمات پیامک را بررسی کنید.');
+		edd_insert_payment_note($pay->ID, '⚠️ ارسال پیامک لایسنس پس از ۵ بار تلاش ناموفق بود. هر ۵ دقیقه مجدداً تلاش می‌شود.');
 
 	spot_sms_schedule_msg1($order_id, $platform, $attempt + 1, spot_sms_retry_delay($attempt));
 }
@@ -351,6 +366,13 @@ function spot_sms_handle_msg2(int $order_id, string $platform, int $attempt): vo
 		return;
 	}
 
+	if ($attempt >= SPOT_SMS_MAX_ATTEMPTS) {
+		$order->update_meta_data('_spot_sms_msg2_status', 'abandoned');
+		$order->save_meta_data();
+		$order->add_order_note('🛑 ارسال کد لایسنس پس از ' . $attempt . ' بار تلاش متوقف شد.');
+		return;
+	}
+
 	if ($attempt === 5)
 		$order->add_order_note('⚠️ ارسال کد لایسنس پس از ۵ بار تلاش ناموفق بود. هر ۵ دقیقه مجدداً تلاش می‌شود.');
 
@@ -380,6 +402,12 @@ function spot_sms_do_msg2_edd(EDD_Payment $pay, int $order_id, string $platform,
 		return;
 	}
 
+	if ($attempt >= SPOT_SMS_MAX_ATTEMPTS) {
+		$pay->update_meta('_spot_sms_msg2_status', 'abandoned');
+		edd_insert_payment_note($pay->ID, '🛑 ارسال کد لایسنس پس از ' . $attempt . ' بار تلاش متوقف شد.');
+		return;
+	}
+
 	if ($attempt === 5)
 		edd_insert_payment_note($pay->ID, '⚠️ ارسال کد لایسنس پس از ۵ بار تلاش ناموفق بود. هر ۵ دقیقه مجدداً تلاش می‌شود.');
 
@@ -399,11 +427,12 @@ function spot_sms_admin_section($order, int $order_id, string $platform): void {
 	$m2t = (int)    $order->get_meta('_spot_sms_msg2_sent_at');
 
 	$fmt = function(string $s, int $a, int $t): string {
-		if ($s === 'sent')    return '✅ ارسال شد' . ($t ? ' — ' . date_i18n('Y/m/d H:i', $t) : '');
-		if ($s === 'failed')  return '⚠️ ارسال نشد (' . $a . ' بار تلاش)';
-		if ($s === 'blocked') return '⏸ در انتظار پیامک اول';
-		if ($a > 0)           return '🔄 در حال تلاش (' . $a . ' بار)';
-		if ($s)               return '⏳ در صف ارسال';
+		if ($s === 'sent')      return '✅ ارسال شد' . ($t ? ' — ' . date_i18n('Y/m/d H:i', $t) : '');
+		if ($s === 'failed')    return '⚠️ ارسال نشد (' . $a . ' بار تلاش)';
+		if ($s === 'abandoned') return '🛑 متوقف شد (' . $a . ' بار تلاش)';
+		if ($s === 'blocked')   return '⏸ در انتظار پیامک اول';
+		if ($a > 0)             return '🔄 در حال تلاش (' . $a . ' بار)';
+		if ($s)                 return '⏳ در صف ارسال';
 		return '📵 ارسال نشده';
 	};
 	?>

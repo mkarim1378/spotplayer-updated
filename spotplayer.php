@@ -1,7 +1,7 @@
 <?php
 /**
  * Plugin Name: اسپات پلیر
- * Version: 23.0
+ * Version: 23.1
  * Description: نسخه جدیدی از افزونه اسپات پلیر با قابلیت های جدید. توسعه داده شده توسط نیازهای آکادمی کارنو
  * Author: محمد کریم قصبه
  * Author URI: https://m-karim.ir/
@@ -47,6 +47,9 @@ require_once SPOTPLAYER_DIR . 'includes/admin/dashboard-widget.php';
 
 // Admin settings page (loaded last — depends on all modules above)
 require_once SPOTPLAYER_DIR . 'includes/admin/settings.php';
+
+// SMS report page
+require_once SPOTPLAYER_DIR . 'includes/admin/sms-report.php';
 
 register_activation_hook(__FILE__, function () {
 	add_rewrite_endpoint('licenses', EP_PAGES);
