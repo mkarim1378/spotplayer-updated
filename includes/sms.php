@@ -17,6 +17,7 @@ function spot_sms_normalize_phone(string $phone): string {
 
 	if (strpos($phone, '+98') === 0) $phone = '0' . substr($phone, 3);
 	if (strpos($phone, '98')  === 0 && strlen($phone) === 12) $phone = '0' . substr($phone, 2);
+	if (strlen($phone) === 10 && strpos($phone, '9') === 0)   $phone = '0' . $phone;
 
 	return preg_match('/^09[0-9]{9}$/', $phone) ? $phone : '';
 }
@@ -389,7 +390,6 @@ function spot_sms_do_msg2_edd(EDD_Payment $pay, int $order_id, string $platform,
 
 function spot_sms_admin_section($order, int $order_id, string $platform): void {
 	if (!spot_sms_is_enabled() || !method_exists($order, 'get_meta')) return;
-	if (!$order->get_meta('_spot_sms_phone')) return;
 
 	$m1s = (string) $order->get_meta('_spot_sms_msg1_status');
 	$m1a = (int)    $order->get_meta('_spot_sms_msg1_attempts');
@@ -403,7 +403,8 @@ function spot_sms_admin_section($order, int $order_id, string $platform): void {
 		if ($s === 'failed')  return '⚠️ ارسال نشد (' . $a . ' بار تلاش)';
 		if ($s === 'blocked') return '⏸ در انتظار پیامک اول';
 		if ($a > 0)           return '🔄 در حال تلاش (' . $a . ' بار)';
-		return '⏳ در صف ارسال';
+		if ($s)               return '⏳ در صف ارسال';
+		return '📵 ارسال نشده';
 	};
 	?>
 	<hr style="margin:10px 0;border:none;border-top:1px solid #ddd">

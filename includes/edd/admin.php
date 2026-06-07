@@ -23,8 +23,9 @@ function spot_edd_admin_payment_box(int $pid) {
 		<h3 class="hndle"><span>اطلاعات اسپات پلیر</span></h3>
 		<div class="inside edd-clearfix">
 			<?php
-			spot_admin_order_box(spot_edd_license_data($pay));
-			spot_sms_admin_section($pay, $pay->ID, 'edd');
+			$spot_data = spot_edd_license_data($pay);
+			spot_admin_order_box($spot_data);
+			if (!empty($spot_data['_id'])) spot_sms_admin_section($pay, $pay->ID, 'edd');
 			?>
 		</div>
 	</div>
