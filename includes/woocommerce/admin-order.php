@@ -30,10 +30,11 @@ function spot_woo_orders_list_column_content($column, $order_id) {
 	echo '<button type="button" class="button spot-copy-key" data-key="' . esc_attr($data['key']) . '">کپی لایسنس</button>';
 	echo ' <a href="https://panel.spotplayer.ir/license/edit/' . esc_attr($data['_id']) . '" target="_blank" class="button">مشاهده در پنل ↗</a>';
 	if (spot_sms_is_enabled()) {
+		$oid = $order->get_id();
 		echo ' <button type="button" class="button spot-sms-send"'
-			. ' data-order="' . esc_attr($order_id) . '"'
-			. ' data-nonce="' . esc_attr(wp_create_nonce('spot_resend_sms_' . $order_id)) . '"'
-			. '>📲 پیامک</button>'
+			. ' data-order="' . esc_attr($oid) . '"'
+			. ' data-nonce="' . esc_attr(wp_create_nonce('spot_resend_sms_' . $oid)) . '"'
+			. '>ارسال پیامک لایسنس</button>'
 			. '<span class="spot-sms-send-res" style="font-size:11px;margin-right:4px"></span>';
 	}
 }
