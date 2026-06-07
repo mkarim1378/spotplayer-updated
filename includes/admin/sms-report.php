@@ -259,10 +259,15 @@ function spot_sms_report_render(): void {
 		</div>
 
 		<!-- Pagination -->
-		<?php if ($total_pages > 1): ?>
-		<div style="margin-top:16px;display:flex;gap:4px;align-items:center;flex-wrap:wrap">
-			<?php for ($p = 1; $p <= $total_pages; $p++):
-				$pu = add_query_arg(array_filter([
+		<?php if ($total_pages > 1):
+			// Build the set of page numbers to show: first 2, window around current, last 2
+			$show = [];
+			for ($p = 1; $p <= $total_pages; $p++) {
+				if ($p <= 2 || $p >= $total_pages - 1 || abs($p - $paged) <= 2) $show[$p] = true;
+			}
+			ksort($show);
+			$page_link = function(int $p) use ($status, $date_from, $date_to, $search): string {
+				return add_query_arg(array_filter([
 					'page'       => 'spot-sms-report',
 					'sms_status' => $status !== 'all' ? $status : false,
 					'date_from'  => $date_from,
@@ -270,10 +275,22 @@ function spot_sms_report_render(): void {
 					'search'     => $search ?: false,
 					'paged'      => $p > 1 ? $p : false,
 				]), admin_url('admin.php'));
+			};
+			$btn = 'padding:4px 10px;border-radius:3px;text-decoration:none;border:1px solid';
+		?>
+		<div style="margin-top:16px;display:flex;gap:4px;align-items:center;flex-wrap:wrap">
+			<?php
+			$prev = null;
+			foreach (array_keys($show) as $p) {
+				if ($prev !== null && $p - $prev > 1):
+				?><span style="padding:4px 6px;color:#999">…</span><?php
+				endif;
+				$active = $p === $paged;
+				?><a href="<?= esc_url($page_link($p)) ?>"
+					style="<?= $btn ?> <?= $active ? '#2271b1;background:#2271b1;color:#fff' : '#ddd;background:#fff;color:#1d2327' ?>"><?= $p ?></a><?php
+				$prev = $p;
+			}
 			?>
-			<a href="<?= esc_url($pu) ?>"
-				style="padding:4px 10px;border:1px solid <?= $p === $paged ? '#2271b1' : '#ddd' ?>;background:<?= $p === $paged ? '#2271b1' : '#fff' ?>;color:<?= $p === $paged ? '#fff' : '#1d2327' ?>;border-radius:3px;text-decoration:none"><?= $p ?></a>
-			<?php endfor; ?>
 			<span style="color:#666;font-size:12px;margin-right:8px"><?= number_format($total) ?> سفارش — صفحه <?= $paged ?> از <?= $total_pages ?></span>
 		</div>
 		<?php endif; ?>
