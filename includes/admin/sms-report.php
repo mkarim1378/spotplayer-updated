@@ -121,7 +121,7 @@ function spot_sms_report_render(): void {
 			<a href="<?= esc_url($card_url) ?>" style="text-decoration:none;flex:1;min-width:160px">
 				<div style="background:#fff;border:2px solid <?= $is_active ? '#2271b1' : '#ddd' ?>;border-radius:6px;padding:16px 20px;text-align:center">
 					<div style="font-size:28px"><?= $card['icon'] ?></div>
-					<div style="font-size:28px;font-weight:700;margin:4px 0;color:#1d2327"><?= number_format($card['count']) ?></div>
+					<div style="font-size:28px;font-weight:700;margin:16px 0 8px 0;color:#1d2327"><?= number_format($card['count']) ?></div>
 					<div style="font-size:13px;font-weight:600;color:#1d2327"><?= esc_html($card['label']) ?></div>
 					<div style="font-size:11px;color:#666;margin-top:2px"><?= esc_html($card['desc']) ?></div>
 				</div>

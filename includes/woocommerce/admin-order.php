@@ -29,6 +29,13 @@ function spot_woo_orders_list_column_content($column, $order_id) {
 	if (empty($data['key'])) return;
 	echo '<button type="button" class="button spot-copy-key" data-key="' . esc_attr($data['key']) . '">کپی لایسنس</button>';
 	echo ' <a href="https://panel.spotplayer.ir/license/edit/' . esc_attr($data['_id']) . '" target="_blank" class="button">مشاهده در پنل ↗</a>';
+	if (spot_sms_is_enabled()) {
+		echo ' <button type="button" class="button spot-sms-send"'
+			. ' data-order="' . esc_attr($order_id) . '"'
+			. ' data-nonce="' . esc_attr(wp_create_nonce('spot_resend_sms_' . $order_id)) . '"'
+			. '>📲 پیامک</button>'
+			. '<span class="spot-sms-send-res" style="font-size:11px;margin-right:4px"></span>';
+	}
 }
 add_action('manage_shop_order_posts_custom_column', 'spot_woo_orders_list_column_content', 10, 2);
 add_action('manage_woocommerce_page_wc-orders_custom_column', 'spot_woo_orders_list_column_content', 10, 2);
@@ -45,6 +52,31 @@ add_action('admin_footer', function () {
 		function done() { btn.textContent = '✓ کپی شد'; setTimeout(function () { btn.textContent = orig; }, 2000); }
 		function legacy() { var t = document.createElement('textarea'); t.value = key; t.style.cssText = 'position:absolute;opacity:0'; document.body.appendChild(t); t.select(); document.execCommand('copy'); document.body.removeChild(t); }
 		navigator.clipboard ? navigator.clipboard.writeText(key).then(done).catch(function () { legacy(); done(); }) : (legacy(), done());
+	});
+	document.addEventListener('click', function (e) {
+		var btn = e.target.closest('.spot-sms-send');
+		if (!btn || btn.disabled) return;
+		var res = btn.nextElementSibling, orig = btn.textContent;
+		btn.disabled = true; btn.textContent = '…';
+		res.style.color = ''; res.textContent = '';
+		var fd = new FormData();
+		fd.append('action',   'spot_resend_sms');
+		fd.append('order_id', btn.dataset.order);
+		fd.append('platform', 'woo');
+		fd.append('nonce',    btn.dataset.nonce);
+		fetch(<?= json_encode(admin_url('admin-ajax.php')) ?>, {method:'POST', body:fd})
+			.then(function(r){return r.json()})
+			.then(function(r){
+				btn.disabled = false; btn.textContent = orig;
+				res.textContent = r.success ? '✓ در صف ارسال' : ('✗ ' + (typeof r.data==='string' ? r.data : 'خطا'));
+				res.style.color = r.success ? 'green' : 'red';
+				setTimeout(function(){ res.textContent = ''; }, 4000);
+			})
+			.catch(function(){
+				btn.disabled = false; btn.textContent = orig;
+				res.textContent = '✗ خطا'; res.style.color = 'red';
+				setTimeout(function(){ res.textContent = ''; }, 4000);
+			});
 	});
 	</script>
 	<?php
