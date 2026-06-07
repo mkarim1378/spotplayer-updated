@@ -127,6 +127,8 @@ function spot_admin_page() {
 	.sp-courses-table td input[type=text] { width:100%; margin:0; }
 	.sp-courses-table .sp-id-col input { font-family:monospace; direction:ltr; font-size:12px; }
 	.sp-courses-table .spot-remove-row { color:#c00; border-color:#c00; padding:2px 8px; min-height:0; height:26px; line-height:24px; }
+	.sp-sms-counter { font-size:12px; color:#646970; margin-top:4px; }
+	.sp-sms-template { direction:rtl !important; font-family:inherit !important; }
 	</style>
 
 	<div id="sp-settings" class="wrap">
@@ -225,6 +227,57 @@ function spot_admin_page() {
 			</div>
 		</div>
 		<?php } ?>
+	</div>
+
+	<div class="sp-card">
+		<h2>📲 ارسال پیامک</h2>
+		<div class="sp-check">
+			<input type="checkbox" id="sp-sms-enabled" name="spotplayer[sms_enabled]" value="1" <?= !empty($sp['sms_enabled']) ? 'checked' : '' ?>>
+			<div>
+				<label class="sp-check-label" for="sp-sms-enabled">ارسال خودکار پیامک پس از صدور لایسنس</label>
+				<div class="sp-check-desc">پس از ایجاد موفق لایسنس، دو پیامک به شماره مشتری ارسال می‌شود: ابتدا متن توضیحات، سپس کد لایسنس به تنهایی.</div>
+			</div>
+		</div>
+		<div class="sp-field" style="margin-top:12px">
+			<label>نام کاربری پیامیتو</label>
+			<input type="text" name="spotplayer[sms_username]" value="<?= esc_attr(@$sp['sms_username']) ?>" autocomplete="off">
+		</div>
+		<div class="sp-field">
+			<label>کلید API وب‌سرویس پیامیتو</label>
+			<input type="text" name="spotplayer[sms_password]" value="<?= esc_attr(@$sp['sms_password']) ?>" style="direction:ltr" autocomplete="off">
+			<p class="description" style="margin-top:4px">از منوی <b>توسعه‌دهندگان</b> در پنل پیامیتو — رمز ورود معمولی حساب شما نیست.</p>
+		</div>
+		<div class="sp-field">
+			<label>شماره فرستنده اصلی</label>
+			<input type="text" name="spotplayer[sms_from]" value="<?= esc_attr(@$sp['sms_from']) ?>" style="direction:ltr" placeholder="10004...">
+		</div>
+		<div class="sp-field">
+			<label>شماره بکاپ ۱ <span style="font-weight:normal;color:#646970">(اختیاری)</span></label>
+			<input type="text" name="spotplayer[sms_from1]" value="<?= esc_attr(@$sp['sms_from1']) ?>" style="direction:ltr">
+		</div>
+		<div class="sp-field">
+			<label>شماره بکاپ ۲ <span style="font-weight:normal;color:#646970">(اختیاری)</span></label>
+			<input type="text" name="spotplayer[sms_from2]" value="<?= esc_attr(@$sp['sms_from2']) ?>" style="direction:ltr">
+		</div>
+		<div class="sp-field">
+			<label>متن پیامک توضیحات</label>
+			<textarea id="sp-sms-template" name="spotplayer[sms_template]" class="sp-sms-template" style="height:100px"><?= esc_textarea(@$sp['sms_template']) ?></textarea>
+			<div id="sp-sms-counter" class="sp-sms-counter"></div>
+			<p class="description" style="margin-top:6px">
+				متغیرها: <code>{customer_name}</code> <code>{order_id}</code> <code>{course_names}</code> <code>{site_name}</code> <code>{site_url}</code><br>
+				<span class="sp-warn">⚠ استفاده از <code>{site_url}</code> ممکن است باعث خطای «حاوی لینک» از پیامیتو شود.</span><br>
+				<span class="sp-warn">⚠ پیامک دوم به‌صورت خودکار فقط کد لایسنس ارسال می‌شود. <code>{license_key}</code> در این متن جایگزین نخواهد شد.</span>
+			</p>
+		</div>
+		<div class="sp-field">
+			<label>ارسال پیامک آزمایشی</label>
+			<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+				<input type="text" id="sp-sms-test-phone" placeholder="09XXXXXXXXX" style="width:160px;direction:ltr;max-width:160px">
+				<button type="button" id="sp-sms-test-btn" class="button">ارسال آزمایشی</button>
+				<span id="sp-sms-test-result" style="font-size:13px"></span>
+			</div>
+			<p class="description" style="margin-top:4px">با مقادیر فعلی فرم تست می‌کند — نیازی به ذخیره قبلی ندارد.</p>
+		</div>
 	</div>
 
 	<div class="sp-shortcode">
@@ -466,5 +519,58 @@ function spot_admin_page() {
 		</form>
 	</div>
 	</div>
+
+	<script>
+	(function(){
+		// ── Character counter ────────────────────────────────────────────────
+		var ta      = document.getElementById('sp-sms-template');
+		var counter = document.getElementById('sp-sms-counter');
+		if (ta && counter) {
+			function updateCounter() {
+				var len   = ta.value.length;
+				var parts = len === 0 ? 0 : Math.ceil(len / 70);
+				counter.textContent = len > 0
+					? len + ' کاراکتر — حدود ' + parts + ' پارت پیامک فارسی (هر پارت ۷۰ کاراکتر)'
+					: '';
+				counter.style.color = len > 140 ? '#9e2a2a' : '#646970';
+			}
+			ta.addEventListener('input', updateCounter);
+			updateCounter();
+		}
+
+		// ── Test SMS ─────────────────────────────────────────────────────────
+		var testBtn    = document.getElementById('sp-sms-test-btn');
+		var testResult = document.getElementById('sp-sms-test-result');
+		if (testBtn && testResult) {
+			testBtn.addEventListener('click', function(){
+				var phone = document.getElementById('sp-sms-test-phone').value.trim();
+				if (!phone) { testResult.textContent = 'شماره موبایل را وارد کنید.'; testResult.style.color='#c00'; return; }
+
+				testBtn.disabled       = true;
+				testResult.textContent = '⏳ در حال ارسال…';
+				testResult.style.color = '#646970';
+
+				var data = new FormData();
+				data.append('action',       'spot_test_sms');
+				data.append('nonce',        <?= json_encode(wp_create_nonce('spot_test_sms')) ?>);
+				data.append('phone',        phone);
+				data.append('sms_username', document.querySelector('[name="spotplayer[sms_username]"]').value);
+				data.append('sms_password', document.querySelector('[name="spotplayer[sms_password]"]').value);
+				data.append('sms_from',     document.querySelector('[name="spotplayer[sms_from]"]').value);
+				data.append('sms_from1',    document.querySelector('[name="spotplayer[sms_from1]"]').value);
+				data.append('sms_from2',    document.querySelector('[name="spotplayer[sms_from2]"]').value);
+
+				fetch(<?= json_encode(admin_url('admin-ajax.php')) ?>, {method:'POST', body:data})
+					.then(function(r){ return r.json(); })
+					.then(function(res){
+						testResult.textContent = res.success ? '✅ ' + res.data : '❌ ' + (res.data || 'خطای نامشخص');
+						testResult.style.color  = res.success ? '#1a7a1a' : '#c00';
+					})
+					.catch(function(){ testResult.textContent='❌ خطا در ارتباط با سرور.'; testResult.style.color='#c00'; })
+					.finally(function(){ testBtn.disabled = false; });
+			});
+		}
+	})();
+	</script>
 	<?php
 }
