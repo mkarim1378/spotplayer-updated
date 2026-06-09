@@ -10,24 +10,154 @@ function spot_woo_order_items(?WC_Order $ord, $products = false): array {
 	return $r;
 }
 
+/** Returns map of course_id => [number, total, limit, days] for items that have installment meta set. */
+function spot_woo_order_installment_items(WC_Order $ord): array {
+	$result = [];
+	foreach ($ord->get_items() as $item) {
+		if (!($item instanceof WC_Order_Item_Product)) continue;
+		$number = intval($item->get_meta('_spot_installment_number'));
+		if ($number < 1) continue;
+		$product = $item->get_product();
+		if (!($product instanceof WC_Product)) continue;
+		$cids = array_filter(explode(',', (string) $product->get_meta('_spotplayer_course')));
+		if (count($cids) !== 1) continue;
+		$cid = reset($cids);
+		$result[$cid] = [
+			'number' => $number,
+			'total'  => intval($item->get_meta('_spot_installment_total')),
+			'limit'  => (string) $item->get_meta('_spot_installment_limit'),
+			'days'   => intval($item->get_meta('_spot_installment_days')),
+		];
+	}
+	return $result;
+}
+
+/** Finds _spotplayer_data from the most recent previous order for the same customer containing course_id. */
+function spot_find_prev_license(WC_Order $ord, string $course_id): ?array {
+	$current_id  = $ord->get_id();
+	$customer_id = intval($ord->get_customer_id());
+	$phone       = $ord->get_billing_phone();
+
+	$base = [
+		'status'  => ['processing', 'completed'],
+		'limit'   => 20,
+		'orderby' => 'date',
+		'order'   => 'DESC',
+		'exclude' => [$current_id],
+	];
+
+	$candidates = [];
+
+	if ($customer_id) {
+		$candidates = wc_get_orders(array_merge($base, ['customer_id' => $customer_id]));
+	}
+
+	if (empty($candidates) && $phone) {
+		// Direct arg — WC 7+ / HPOS
+		$candidates = wc_get_orders(array_merge($base, ['billing_phone' => $phone]));
+	}
+
+	if (empty($candidates) && $phone) {
+		// Classic WC fallback via meta_query
+		$candidates = wc_get_orders(array_merge($base, [
+			'meta_query' => [['key' => '_billing_phone', 'value' => $phone]],
+		]));
+	}
+
+	foreach ($candidates as $prev) {
+		$prev_data = $prev->get_meta('_spotplayer_data');
+		if (empty($prev_data['_id'])) continue;
+		if (!in_array($course_id, spot_woo_order_items($prev), true)) continue;
+		return $prev_data;
+	}
+
+	return null;
+}
+
 /** @throws Exception */
 function spot_woo_order_license_request(WC_Order $ord, $admin = false): ?array {
 	if (@($data = spot_woo_license_data($ord))['_id']) return $data;
 	if (!count($courses = spot_woo_order_items($ord))) return null;
 	if (!$admin && ($ord->get_date_created()->getTimestamp() < (get_option('spotplayer')['time'] ?: 0))) return null;
 
+	$inst_items = spot_woo_order_installment_items($ord);
+
+	$update_items = [];
+	foreach ($inst_items as $cid => $inst) {
+		if ($inst['number'] > 1) $update_items[$cid] = $inst;
+	}
+
 	try {
+		if (!empty($update_items)) {
+			// ── UPDATE MODE: installment 2+ ──────────────────────────────────────
+			reset($update_items);
+			$lookup_cid  = key($update_items);
+			$lookup_inst = $update_items[$lookup_cid];
+
+			$prev_data = spot_find_prev_license($ord, $lookup_cid);
+			if (!$prev_data) throw new Exception('لایسنس قبلی برای این مشتری و دوره پیدا نشد', 998);
+
+			$license_id = $prev_data['_id'];
+
+			$limit_map = [];
+			foreach ($update_items as $cid => $u_inst) {
+				$limit_map[$cid] = $u_inst['limit'];
+			}
+
+			$suffix   = ' قسط ' . $lookup_inst['number'] . ' از ' . $lookup_inst['total'];
+			$api_name = (isset($data['name']) ? $data['name'] : '') . $suffix;
+
+			$rep = spot_request(
+				'https://panel.spotplayer.ir/license/edit/' . $license_id,
+				['name' => $api_name, 'data' => ['limit' => $limit_map]]
+			);
+			if (empty($rep['_id'])) throw new Exception('پاسخ نامعتبر از سرور اسپات', 999);
+
+			$saved = array_merge($prev_data, $rep);
+			$ord->update_meta_data('_spotplayer_data', $saved);
+			$ord->save_meta_data();
+			$ord->add_order_note(sprintf(
+				'لایسنس با شناسه %s برای قسط %d از %d آپدیت شد.',
+				'<a href="https://panel.spotplayer.ir/license/edit/' . esc_attr($license_id) . '" target="_blank">' . $license_id . '</a>',
+				$lookup_inst['number'],
+				$lookup_inst['total']
+			));
+			spot_sms_trigger_woo($ord);
+			return $saved;
+		}
+
+		// ── CREATE MODE: installment 1 or standard purchase ──────────────────────
 		$req_data = array_merge($data, ['course' => $courses, 'payload' => strval($ord->get_id())]);
 
-		$custom_limit = $ord->get_meta('_spot_limit');
-		if (!empty($custom_limit)) {
+		if (!empty($inst_items)) {
+			// Build per-item limit map; ignore _spot_limit order meta
 			$limit_map = [];
-			foreach ($courses as $cid) $limit_map[$cid] = $custom_limit;
+			foreach ($inst_items as $cid => $inst) {
+				if ($inst['limit'] !== '') $limit_map[$cid] = $inst['limit'];
+			}
+			if (!empty($limit_map)) {
+				$df = isset($req_data['data']) ? $req_data['data'] : [];
+				$df['limit'] = $limit_map;
+				if (!isset($df['confs'])) $df['confs'] = 0;
+				$req_data['data'] = $df;
+			}
 
-			$current_data_field = isset($req_data['data']) ? $req_data['data'] : [];
-			$current_data_field['limit'] = $limit_map;
-			if (!isset($current_data_field['confs'])) $current_data_field['confs'] = 0;
-			$req_data['data'] = $current_data_field;
+			// Append installment suffix to the license name (API only)
+			reset($inst_items);
+			$first_inst       = current($inst_items);
+			$suffix           = ' قسط ' . $first_inst['number'] . ' از ' . $first_inst['total'];
+			$req_data['name'] = (isset($req_data['name']) ? $req_data['name'] : '') . $suffix;
+		} else {
+			$custom_limit = $ord->get_meta('_spot_limit');
+			if (!empty($custom_limit)) {
+				$limit_map = [];
+				foreach ($courses as $cid) $limit_map[$cid] = $custom_limit;
+
+				$current_data_field = isset($req_data['data']) ? $req_data['data'] : [];
+				$current_data_field['limit'] = $limit_map;
+				if (!isset($current_data_field['confs'])) $current_data_field['confs'] = 0;
+				$req_data['data'] = $current_data_field;
+			}
 		}
 
 		$rep = spot_request_license_put($req_data);
@@ -41,8 +171,8 @@ function spot_woo_order_license_request(WC_Order $ord, $admin = false): ?array {
 
 	} catch (Exception $ex) {
 		$code_txt = $ex->getCode() ? ' (کد: ' . $ex->getCode() . ')' : '';
-		$err      = sprintf('خطای %s هنگام ایجاد لایسنس روی داد.', '<b>«' . $ex->getMessage() . '»</b>') . $code_txt;
-		$extra    = $ex->getCode() == 999
+		$err      = sprintf('خطای %s هنگام ایجاد/آپدیت لایسنس روی داد.', '<b>«' . $ex->getMessage() . '»</b>') . $code_txt;
+		$extra    = ($ex->getCode() == 999)
 			? ' <a target="_blank" href="' . parse_url(get_home_url(), PHP_URL_PATH) . '/spdeb?id=' . $ord->get_id() . '">اطلاعات دیباگ</a>'
 			: ' <a target="_blank" href="https://spotplayer.ir/help/api/wordpress">راهنما</a>';
 		$ord->add_order_note($err . $extra);
