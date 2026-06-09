@@ -186,9 +186,6 @@ add_action('admin_footer', function () {
 	</style>
 	<script>
 	(function () {
-		var orderItems = document.getElementById('order_line_items');
-		if (!orderItems) return;
-
 		var ajax  = <?= json_encode(admin_url('admin-ajax.php')) ?>;
 		var nonce = <?= json_encode($nonce) ?>;
 
@@ -256,23 +253,16 @@ add_action('admin_footer', function () {
 		}
 
 		function scanRows() {
-			orderItems.querySelectorAll('tr.item').forEach(processRow);
+			var table = document.getElementById('order_line_items');
+			if (table) table.querySelectorAll('tr.item').forEach(processRow);
 		}
 
 		scanRows();
 
-		new MutationObserver(function (mutations) {
-			mutations.forEach(function (m) {
-				m.addedNodes.forEach(function (node) {
-					if (node.nodeType !== 1) return;
-					if (node.classList.contains('item')) {
-						processRow(node);
-					} else if (node.querySelectorAll) {
-						node.querySelectorAll('tr.item').forEach(processRow);
-					}
-				});
-			});
-		}).observe(orderItems, {childList: true, subtree: true});
+		// WC replaces the entire #order_line_items table when items are added/removed,
+		// so we observe the stable metabox container instead of the table itself.
+		var container = document.getElementById('woocommerce-order-items') || document.body;
+		new MutationObserver(scanRows).observe(container, {childList: true, subtree: true});
 	})();
 	</script>
 	<?php

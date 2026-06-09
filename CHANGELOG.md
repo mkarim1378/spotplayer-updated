@@ -1,9 +1,16 @@
 # تاریخچه تغییرات افزونه اسپات پلیر
 
-## [24.6] - 1404-03-19
+## [24.7] - 1404-03-19
 
 ### رفع باگ
-- **باگ نمایش dropdown قسطی در صفحه ویرایش سفارش**: MutationObserver با `childList: true` بدون `subtree: true` بود — وقتی WooCommerce آیتم اضافه می‌کرد، محتوای `<tbody>` عوض می‌شد نه فرزند مستقیم جدول، پس observer آیتم‌های جدید رو نمی‌دید. حالا با `subtree: true` و بررسی `querySelectorAll('tr.item')` روی هر نود اضافه‌شده برطرف شد.
+- **باگ نمایش dropdown قسطی در صفحه ویرایش سفارش**: وقتی WooCommerce آیتم اضافه می‌کند کل `#order_line_items` را destroy و rebuild می‌کند؛ MutationObserver روی المنت قدیمی متصل بود و المنت جدید را نمی‌دید. حالا Observer روی `#woocommerce-order-items` (که ثابت می‌ماند) نصب شده و `scanRows()` بعد از هر تغییر DOM دوباره اجرا می‌شود.
+
+---
+
+## [24.6] - 1404-03-19
+
+### رفع باگ (جزئی — در 24.7 کامل شد)
+- تلاش اول برای رفع باگ dropdown قسطی با افزودن `subtree: true` به MutationObserver.
 
 ---
 
