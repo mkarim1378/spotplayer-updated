@@ -8,7 +8,8 @@ function spot_admin_order_box($data, $order = null) {
 
 	$fatal_error = $order ? $order->get_meta('_spot_fatal_error') : '';
 
-	$auto_create = !$has_id && !$fatal_error && $order && (
+	$is_admin_order = $order && $order->get_created_via() === 'admin';
+	$auto_create = !$has_id && !$fatal_error && $order && !$is_admin_order && (
 		$status === 'completed' ||
 		($status === 'processing' && !@$sp['completed'])
 	);
