@@ -86,7 +86,7 @@ function spot_sms_report_render(): void {
 
 	$base_args = [
 		'type'         => 'shop_order',
-		'orderby'      => 'date',
+		'orderby'      => 'ID',
 		'order'        => 'DESC',
 		'date_created' => $date_from . '...' . $date_to . ' 23:59:59',
 		'meta_query'   => $meta_query,

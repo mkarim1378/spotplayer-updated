@@ -29,8 +29,16 @@ function spot_admin_page() {
 		foreach ((array)($_POST['spot_courses'] ?? []) as $row) {
 			$id   = sanitize_text_field($row['id']   ?? '');
 			$name = sanitize_text_field($row['name'] ?? '');
-			if (preg_match('/^[0-9a-f]{24}$/i', $id) && $name !== '')
-				$courses[] = ['id' => $id, 'name' => $name];
+			if (!preg_match('/^[0-9a-f]{24}$/i', $id) || $name === '') continue;
+			$installments = [];
+			foreach ((array)($row['installments'] ?? []) as $inst) {
+				$from   = max(0, intval($inst['from'] ?? 0));
+				$to_raw = trim(sanitize_text_field($inst['to'] ?? ''));
+				$days   = max(0, intval($inst['days'] ?? 0));
+				if ($to_raw !== '' && !ctype_digit($to_raw)) continue;
+				$installments[] = ['from' => $from, 'to' => ($to_raw === '' ? '' : intval($to_raw)), 'days' => $days];
+			}
+			$courses[] = ['id' => $id, 'name' => $name, 'installments' => $installments];
 		}
 		update_option('spot_courses', $courses);
 		$courses_notice = '<div class="notice notice-success"><p>✅ لیست دوره‌های اسپات پلیر ذخیره شد.</p></div>';
@@ -133,6 +141,15 @@ function spot_admin_page() {
 	.sp-courses-table td input[type=text] { width:100%; margin:0; }
 	.sp-courses-table .sp-id-col input { font-family:monospace; direction:ltr; font-size:12px; }
 	.sp-courses-table .spot-remove-row { color:#c00; border-color:#c00; padding:2px 8px; min-height:0; height:26px; line-height:24px; }
+	.sp-td-actions { display:flex; gap:4px; align-items:center; justify-content:flex-end; }
+	.sp-inst-toggle { color:#2271b1; border-color:#2271b1; padding:2px 8px; min-height:0; height:26px; line-height:24px; font-size:11px; white-space:nowrap; }
+	.sp-inst-toggle.open { background:#2271b1; color:#fff; }
+	.sp-inst-wrap { background:#f6f7f7; border-top:2px solid #2271b1; padding:10px 12px; }
+	.sp-inst-table { width:100%; border-collapse:collapse; margin-bottom:8px; }
+	.sp-inst-table th { text-align:right; padding:4px 8px; background:#ececec; font-size:11px; font-weight:600; border-bottom:1px solid #dcdcde; }
+	.sp-inst-table td { padding:3px 6px; border-bottom:1px solid #f0f0f1; vertical-align:middle; }
+	.sp-inst-table td input { width:100%; margin:0; }
+	.sp-inst-remove { color:#c00; border-color:#c00; padding:1px 6px; min-height:0; height:22px; line-height:20px; font-size:11px; }
 	.sp-sms-counter { font-size:12px; color:#646970; margin-top:4px; }
 	.sp-sms-template { direction:rtl !important; font-family:inherit !important; }
 	/* ── Tabs ── */
@@ -340,16 +357,48 @@ function spot_admin_page() {
 				<input type="hidden" name="spot_save_courses" value="1">
 				<table class="sp-courses-table">
 					<thead><tr>
-						<th style="width:45%">نام دوره</th>
-						<th class="sp-id-col" style="width:48%">شناسه دوره (۲۴ کاراکتر هگز از پنل اسپات)</th>
-						<th style="width:7%"></th>
+						<th style="width:40%">نام دوره</th>
+						<th class="sp-id-col" style="width:42%">شناسه دوره (۲۴ کاراکتر هگز از پنل اسپات)</th>
+						<th style="width:18%"></th>
 					</tr></thead>
 					<tbody id="spot-courses-tbody">
-					<?php foreach ($saved_courses as $idx => $course) { ?>
-						<tr>
+					<?php foreach ($saved_courses as $idx => $course) {
+						$insts = $course['installments'] ?? [];
+						$inst_count = count($insts); ?>
+						<tr class="sp-course-row" data-idx="<?= $idx ?>">
 							<td><input type="text" name="spot_courses[<?= $idx ?>][name]" value="<?= esc_attr($course['name']) ?>" placeholder="مثلاً: دوره پایتون" required></td>
 							<td class="sp-id-col"><input type="text" name="spot_courses[<?= $idx ?>][id]" value="<?= esc_attr($course['id']) ?>" placeholder="5d2ee35bcddc092a304ae5eb" pattern="[0-9a-fA-F]{24}" required></td>
-							<td><button type="button" class="button spot-remove-row">✕</button></td>
+							<td>
+								<div class="sp-td-actions">
+									<button type="button" class="button sp-inst-toggle<?= $inst_count ? ' open' : '' ?>">📋 اقساط<?= $inst_count ? ' (' . $inst_count . ')' : '' ?></button>
+									<button type="button" class="button spot-remove-row">✕</button>
+								</div>
+							</td>
+						</tr>
+						<tr class="sp-inst-wrap-row"<?= $inst_count ? '' : ' style="display:none"' ?>>
+							<td colspan="3" style="padding:0 0 6px">
+								<div class="sp-inst-wrap">
+									<table class="sp-inst-table">
+										<thead><tr>
+											<th style="width:22%">سرفصل از</th>
+											<th style="width:28%">تا (خالی = دسترسی کامل)</th>
+											<th style="width:35%">روز تا سررسید قسط بعدی</th>
+											<th style="width:15%"></th>
+										</tr></thead>
+										<tbody class="sp-inst-tbody">
+										<?php foreach ($insts as $iidx => $inst) { ?>
+											<tr>
+												<td><input type="number" name="spot_courses[<?= $idx ?>][installments][<?= $iidx ?>][from]" value="<?= esc_attr($inst['from']) ?>" min="0" placeholder="0"></td>
+												<td><input type="text" name="spot_courses[<?= $idx ?>][installments][<?= $iidx ?>][to]" value="<?= esc_attr($inst['to']) ?>" placeholder="مثلاً 4 — یا خالی"></td>
+												<td><input type="number" name="spot_courses[<?= $idx ?>][installments][<?= $iidx ?>][days]" value="<?= esc_attr($inst['days'] ?? '') ?>" min="0" placeholder="مثلاً 30 — آخرین قسط خالی"></td>
+												<td><button type="button" class="button sp-inst-remove">✕</button></td>
+											</tr>
+										<?php } ?>
+										</tbody>
+									</table>
+									<button type="button" class="button sp-add-inst">+ افزودن قسط</button>
+								</div>
+							</td>
 						</tr>
 					<?php } ?>
 					</tbody>
@@ -514,22 +563,91 @@ function spot_admin_page() {
 		});
 
 		// ── جدول دوره‌ها ─────────────────────────────────────────────────────
-		var tbody   = document.getElementById('spot-courses-tbody');
-		var counter = <?= count($saved_courses) ?>;
-		function bindRemove(btn) {
-			btn.addEventListener('click', function () { btn.closest('tr').remove(); });
-		}
-		tbody.querySelectorAll('.spot-remove-row').forEach(bindRemove);
-		document.getElementById('spot-add-course').addEventListener('click', function () {
+		var courseTbody  = document.getElementById('spot-courses-tbody');
+		var courseCounter = <?= count($saved_courses) ?>;
+
+		function makeInstRow(cidx, iidx) {
 			var tr = document.createElement('tr');
 			tr.innerHTML =
-				'<td><input type="text" name="spot_courses[' + counter + '][name]" placeholder="مثلاً: دوره پایتون" required></td>'
-				+ '<td class="sp-id-col"><input type="text" name="spot_courses[' + counter + '][id]" placeholder="5d2ee35bcddc092a304ae5eb" pattern="[0-9a-fA-F]{24}" required></td>'
-				+ '<td><button type="button" class="button spot-remove-row">✕</button></td>';
-			tbody.appendChild(tr);
-			bindRemove(tr.querySelector('.spot-remove-row'));
-			tr.querySelector('input').focus();
-			counter++;
+				'<td><input type="number" name="spot_courses[' + cidx + '][installments][' + iidx + '][from]" min="0" placeholder="0"></td>'
+				+ '<td><input type="text" name="spot_courses[' + cidx + '][installments][' + iidx + '][to]" placeholder="مثلاً 4 — یا خالی"></td>'
+				+ '<td><input type="number" name="spot_courses[' + cidx + '][installments][' + iidx + '][days]" min="0" placeholder="مثلاً 30 — آخرین قسط خالی"></td>'
+				+ '<td><button type="button" class="button sp-inst-remove">✕</button></td>';
+			bindInstRemove(tr.querySelector('.sp-inst-remove'));
+			return tr;
+		}
+
+		function updateToggleLabel(courseRow) {
+			var wrapRow = courseRow.nextElementSibling;
+			var count   = wrapRow ? wrapRow.querySelectorAll('.sp-inst-tbody tr').length : 0;
+			var btn     = courseRow.querySelector('.sp-inst-toggle');
+			btn.textContent = '📋 اقساط' + (count > 0 ? ' (' + count + ')' : '');
+			btn.classList.toggle('open', count > 0);
+		}
+
+		function bindInstRemove(btn) {
+			btn.addEventListener('click', function () {
+				var wrapRow = btn.closest('.sp-inst-wrap-row');
+				btn.closest('tr').remove();
+				updateToggleLabel(wrapRow.previousElementSibling);
+			});
+		}
+
+		function bindCourseRow(courseRow) {
+			var wrapRow  = courseRow.nextElementSibling;
+			var instTbody = wrapRow.querySelector('.sp-inst-tbody');
+
+			courseRow.querySelector('.spot-remove-row').addEventListener('click', function () {
+				wrapRow.remove();
+				courseRow.remove();
+			});
+
+			courseRow.querySelector('.sp-inst-toggle').addEventListener('click', function () {
+				var open = wrapRow.style.display !== 'none';
+				wrapRow.style.display = open ? 'none' : '';
+				this.classList.toggle('open', !open);
+			});
+
+			wrapRow.querySelector('.sp-add-inst').addEventListener('click', function () {
+				var cidx = courseRow.dataset.idx;
+				var iidx = instTbody.querySelectorAll('tr').length;
+				instTbody.appendChild(makeInstRow(cidx, iidx));
+				wrapRow.style.display = '';
+				updateToggleLabel(courseRow);
+			});
+
+			instTbody.querySelectorAll('.sp-inst-remove').forEach(bindInstRemove);
+		}
+
+		courseTbody.querySelectorAll('.sp-course-row').forEach(bindCourseRow);
+
+		document.getElementById('spot-add-course').addEventListener('click', function () {
+			var cidx      = courseCounter;
+			var courseRow = document.createElement('tr');
+			courseRow.className  = 'sp-course-row';
+			courseRow.dataset.idx = cidx;
+			courseRow.innerHTML  =
+				'<td><input type="text" name="spot_courses[' + cidx + '][name]" placeholder="مثلاً: دوره پایتون" required></td>'
+				+ '<td class="sp-id-col"><input type="text" name="spot_courses[' + cidx + '][id]" placeholder="5d2ee35bcddc092a304ae5eb" pattern="[0-9a-fA-F]{24}" required></td>'
+				+ '<td><div class="sp-td-actions"><button type="button" class="button sp-inst-toggle">📋 اقساط</button><button type="button" class="button spot-remove-row">✕</button></div></td>';
+
+			var wrapRow = document.createElement('tr');
+			wrapRow.className   = 'sp-inst-wrap-row';
+			wrapRow.style.display = 'none';
+			wrapRow.innerHTML   =
+				'<td colspan="3" style="padding:0 0 6px"><div class="sp-inst-wrap">'
+				+ '<table class="sp-inst-table"><thead><tr>'
+				+ '<th style="width:22%">سرفصل از</th><th style="width:28%">تا (خالی = دسترسی کامل)</th>'
+				+ '<th style="width:35%">روز تا سررسید قسط بعدی</th><th style="width:15%"></th>'
+				+ '</tr></thead><tbody class="sp-inst-tbody"></tbody></table>'
+				+ '<button type="button" class="button sp-add-inst">+ افزودن قسط</button>'
+				+ '</div></td>';
+
+			courseTbody.appendChild(courseRow);
+			courseTbody.appendChild(wrapRow);
+			bindCourseRow(courseRow);
+			courseRow.querySelector('input').focus();
+			courseCounter++;
 		});
 
 		// ── شمارنده کاراکتر پیامک ────────────────────────────────────────────
