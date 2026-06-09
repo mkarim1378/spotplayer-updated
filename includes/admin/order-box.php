@@ -13,9 +13,9 @@ function spot_admin_order_box($data, $order = null) {
 		($status === 'processing' && !@$sp['completed'])
 	);
 
-	// Per-order test flag — falls back to global setting if not set on the order
+	// Per-order test flag — defaults to unchecked
 	$raw_test  = $order ? $order->get_meta('_spot_test') : '';
-	$is_test   = $raw_test !== '' ? (bool) $raw_test : (bool) @$sp['test'];
+	$is_test   = $raw_test !== '' && (bool) $raw_test;
 	$test_attr = $is_test ? 'checked' : '';
 
 	// ── حالت ۱: در حال ایجاد لایسنس ─────────────────────────────────────────

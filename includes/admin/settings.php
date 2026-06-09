@@ -209,14 +209,6 @@ function spot_admin_page() {
 		<div class="sp-card">
 			<h2>⚙️ ساخت لایسنس</h2>
 			<div class="sp-check">
-				<input type="checkbox" id="sp-test" name="spotplayer[test]" value="1" <?= $sp['test'] ? 'checked' : '' ?>>
-				<div>
-					<label class="sp-check-label" for="sp-test">حالت تستی</label>
-					<div class="sp-check-desc">لایسنس‌های ساخته‌شده پس از خرید تستی خواهند بود.</div>
-					<div class="sp-warn">پس از تست حتماً غیرفعال کنید — در حالت تستی لایسنس‌های جدید جایگزین قبلی می‌شوند.</div>
-				</div>
-			</div>
-			<div class="sp-check">
 				<input type="checkbox" id="sp-time" name="spotplayer[time]" value="<?= $sp['time'] ?: time() ?>" <?= $sp['time'] ? 'checked' : '' ?>>
 				<div>
 					<label class="sp-check-label" for="sp-time">عدم ایجاد لایسنس برای سفارشات قدیمی</label>
