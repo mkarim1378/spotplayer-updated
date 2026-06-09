@@ -145,33 +145,36 @@ function spot_ajax_get_installments(): void {
 	wp_send_json_success(['course_id' => $course_id, 'installments' => $result, 'current' => $current]);
 }
 
-add_action('woocommerce_before_save_order_item', 'spot_save_installment_item_meta');
-function spot_save_installment_item_meta(WC_Order_Item $item): void {
-	if (!($item instanceof WC_Order_Item_Product) || empty($_POST['items'])) return;
+// Saves installment meta immediately when admin changes the dropdown (fire-and-forget AJAX).
+add_action('wp_ajax_spot_save_installment_item', 'spot_ajax_save_installment_item');
+function spot_ajax_save_installment_item(): void {
+	check_ajax_referer('spot_admin_order', 'nonce');
+	if (!current_user_can('manage_woocommerce')) { wp_send_json_error('unauthorized'); return; }
 
-	$parsed = [];
-	parse_str(wp_unslash($_POST['items']), $parsed);
+	$item_id = intval($_POST['item_id'] ?? 0);
+	if (!$item_id) { wp_send_json_error('no_item'); return; }
 
-	$item_id  = $item->get_id();
-	$json_map = (array) ($parsed['spot_installment_json'] ?? []);
-	if (!array_key_exists($item_id, $json_map)) return;
+	$item = WC_Order_Factory::get_order_item($item_id);
+	if (!($item instanceof WC_Order_Item_Product)) { wp_send_json_error('invalid'); return; }
 
-	$raw = $json_map[$item_id];
+	$raw = sanitize_text_field($_POST['data'] ?? '');
 
-	if ($raw === '' || $raw === null) {
+	if ($raw === '') {
 		foreach (['_spot_installment_number', '_spot_installment_total', '_spot_installment_limit', '_spot_installment_days', '_spot_installment_due'] as $key)
 			$item->delete_meta_data($key);
+		$item->save();
+		wp_send_json_success('cleared');
 		return;
 	}
 
-	$data   = json_decode(sanitize_text_field($raw), true);
-	if (!is_array($data)) return;
+	$data = json_decode($raw, true);
+	if (!is_array($data)) { wp_send_json_error('bad_data'); return; }
 
 	$number = intval($data['n'] ?? 0);
 	$total  = intval($data['t'] ?? 0);
-	$limit  = preg_replace('/[^0-9\-]/', '', (string) ($data['l'] ?? ''));
+	$limit  = preg_replace('/[^0-9\-]/', '', (string)($data['l'] ?? ''));
 	$days   = max(0, intval($data['d'] ?? 0));
-	if ($number < 1 || $total < 1) return;
+	if ($number < 1 || $total < 1) { wp_send_json_error('invalid_values'); return; }
 
 	$due = '';
 	if ($days > 0) {
@@ -185,6 +188,9 @@ function spot_save_installment_item_meta(WC_Order_Item $item): void {
 	$item->update_meta_data('_spot_installment_limit',  $limit);
 	$item->update_meta_data('_spot_installment_days',   $days);
 	$item->update_meta_data('_spot_installment_due',    $due);
+	$item->save();
+
+	wp_send_json_success('saved');
 }
 
 add_action('admin_footer', function () {
@@ -233,15 +239,17 @@ add_action('admin_footer', function () {
 				sel.appendChild(opt);
 			});
 
-			var hidden = document.createElement('input');
-			hidden.type  = 'hidden';
-			hidden.name  = 'spot_installment_json[' + itemId + ']';
-			hidden.value = sel.value;
-			sel.addEventListener('change', function () { hidden.value = sel.value; });
+			sel.addEventListener('change', function () {
+				var fd = new FormData();
+				fd.append('action',  'spot_save_installment_item');
+				fd.append('nonce',   nonce);
+				fd.append('item_id', itemId);
+				fd.append('data',    sel.value);
+				fetch(ajax, {method: 'POST', body: fd}).catch(function(){});
+			});
 
 			wrap.appendChild(lbl);
 			wrap.appendChild(sel);
-			wrap.appendChild(hidden);
 			nameTd.appendChild(wrap);
 		}
 
