@@ -255,15 +255,24 @@ add_action('admin_footer', function () {
 				.catch(function () {});
 		}
 
-		orderItems.querySelectorAll('tr.item').forEach(processRow);
+		function scanRows() {
+			orderItems.querySelectorAll('tr.item').forEach(processRow);
+		}
+
+		scanRows();
 
 		new MutationObserver(function (mutations) {
 			mutations.forEach(function (m) {
 				m.addedNodes.forEach(function (node) {
-					if (node.nodeType === 1 && node.classList.contains('item')) processRow(node);
+					if (node.nodeType !== 1) return;
+					if (node.classList.contains('item')) {
+						processRow(node);
+					} else if (node.querySelectorAll) {
+						node.querySelectorAll('tr.item').forEach(processRow);
+					}
 				});
 			});
-		}).observe(orderItems, {childList: true});
+		}).observe(orderItems, {childList: true, subtree: true});
 	})();
 	</script>
 	<?php
