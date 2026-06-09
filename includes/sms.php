@@ -482,6 +482,142 @@ function spot_sms_admin_section($order, int $order_id, string $platform): void {
 	<?php
 }
 
+// ── Installment-update SMS (single message, no key resend) ──────────────────
+
+function spot_sms_build_installment_message(string $template, WC_Order $order, array $inst): string {
+	$vars = [
+		'{customer_name}'           => trim($order->get_billing_first_name() . ' ' . $order->get_billing_last_name()),
+		'{order_id}'                => (string) $order->get_order_number(),
+		'{course_names}'            => spot_sms_course_names_woo($order),
+		'{site_name}'               => get_bloginfo('name'),
+		'{site_url}'                => get_bloginfo('url'),
+		'{installment_number}'      => (string) ($inst['number'] ?? ''),
+		'{total_installments}'      => (string) ($inst['total'] ?? ''),
+		'{next_installment_number}' => (string) (intval($inst['number'] ?? 0) + 1),
+		'{due_date}'                => (string) ($inst['due'] ?? ''),
+	];
+	return str_replace(array_keys($vars), array_values($vars), $template);
+}
+
+function spot_sms_trigger_installment_update(WC_Order $order, array $inst): void {
+	if (!spot_sms_is_enabled()) return;
+
+	$phone = spot_sms_normalize_phone($order->get_billing_phone());
+	if (!$phone) {
+		$order->add_order_note('⚠️ شماره تلفن یافت نشد — پیامک قسط ارسال نشد.');
+		return;
+	}
+
+	$is_final     = intval($inst['number'] ?? 0) >= intval($inst['total'] ?? 1);
+	$template_key = $is_final ? 'sms_template_installment_final' : 'sms_template_installment_mid';
+
+	if (function_exists('as_schedule_single_action')) {
+		as_schedule_single_action(time() + 5, 'spot_sms_inst_update', [
+			'order_id'     => $order->get_id(),
+			'phone'        => $phone,
+			'template_key' => $template_key,
+			'inst_number'  => intval($inst['number'] ?? 0),
+			'inst_total'   => intval($inst['total'] ?? 0),
+			'attempt'      => 1,
+		]);
+		return;
+	}
+
+	// Synchronous fallback
+	$sp   = get_option('spotplayer', []);
+	$text = spot_sms_build_installment_message((string) ($sp[$template_key] ?? ''), $order, $inst);
+	if (!trim($text)) { $order->add_order_note('⚠️ قالب پیامک قسط تنظیم نشده — پیامک ارسال نشد.'); return; }
+	$r = spot_sms_send_raw($phone, $text);
+	if ($r['ok'])
+		$order->add_order_note('📲 پیامک ' . ($is_final ? 'قسط آخر' : 'قسط ' . $inst['number']) . ' به ' . $phone . ' ارسال شد.');
+	else
+		$order->add_order_note('⚠️ ارسال پیامک قسط ناموفق بود: ' . $r['error']);
+}
+
+add_action('spot_sms_inst_update', 'spot_sms_handle_inst_update', 10, 6);
+function spot_sms_handle_inst_update(int $order_id, string $phone, string $template_key, int $inst_number, int $inst_total, int $attempt): void {
+	$order = wc_get_order($order_id);
+	if (!($order instanceof WC_Order)) return;
+
+	$sp   = get_option('spotplayer', []);
+	$text = spot_sms_build_installment_message(
+		(string) ($sp[$template_key] ?? ''),
+		$order,
+		['number' => $inst_number, 'total' => $inst_total]
+	);
+
+	if (!trim($text)) { $order->add_order_note('⚠️ قالب پیامک قسط تنظیم نشده — پیامک ارسال نشد.'); return; }
+
+	$result = spot_sms_send_raw($phone, $text);
+
+	if ($result['ok']) {
+		$is_final = $inst_number >= $inst_total;
+		$order->add_order_note('📲 پیامک ' . ($is_final ? 'قسط آخر' : 'قسط ' . $inst_number) . ' به ' . $phone . ' ارسال شد.');
+		return;
+	}
+
+	if ($attempt >= SPOT_SMS_MAX_ATTEMPTS) {
+		$order->add_order_note('🛑 ارسال پیامک قسط پس از ' . $attempt . ' بار تلاش متوقف شد.');
+		return;
+	}
+
+	if (!function_exists('as_schedule_single_action')) return;
+	as_schedule_single_action(time() + spot_sms_retry_delay($attempt), 'spot_sms_inst_update', [
+		'order_id'     => $order_id,
+		'phone'        => $phone,
+		'template_key' => $template_key,
+		'inst_number'  => $inst_number,
+		'inst_total'   => $inst_total,
+		'attempt'      => $attempt + 1,
+	]);
+}
+
+// ── AJAX: send reminder SMS from installments dashboard ──────────────────────
+
+add_action('wp_ajax_spot_send_reminder_sms', 'spot_ajax_send_reminder_sms');
+function spot_ajax_send_reminder_sms(): void {
+	if (!current_user_can('manage_woocommerce')) { wp_send_json_error('unauthorized'); return; }
+	$order_id = intval($_POST['order_id'] ?? 0);
+	check_ajax_referer('spot_reminder_sms_' . $order_id, 'nonce');
+
+	if (!spot_sms_is_enabled()) { wp_send_json_error('سرویس پیامک فعال نیست.'); return; }
+
+	$order = wc_get_order($order_id);
+	if (!($order instanceof WC_Order)) { wp_send_json_error('سفارش یافت نشد.'); return; }
+
+	$inst = null;
+	foreach ($order->get_items() as $item) {
+		if (!($item instanceof WC_Order_Item_Product)) continue;
+		$number = intval($item->get_meta('_spot_installment_number'));
+		if ($number < 1) continue;
+		$inst = [
+			'number' => $number,
+			'total'  => intval($item->get_meta('_spot_installment_total')),
+			'due'    => (string) $item->get_meta('_spot_installment_due'),
+		];
+		break;
+	}
+
+	if (!$inst) { wp_send_json_error('اطلاعات قسط در این سفارش یافت نشد.'); return; }
+
+	$phone = spot_sms_normalize_phone($order->get_billing_phone());
+	if (!$phone) { wp_send_json_error('شماره تلفن در سفارش یافت نشد.'); return; }
+
+	$sp       = get_option('spotplayer', []);
+	$template = (string) ($sp['sms_template_reminder'] ?? '');
+	if (!trim($template)) { wp_send_json_error('قالب پیامک یادآور تنظیم نشده است.'); return; }
+
+	$text   = spot_sms_build_installment_message($template, $order, $inst);
+	$result = spot_sms_send_raw($phone, $text);
+
+	if ($result['ok']) {
+		$order->add_order_note('📲 پیامک یادآور سررسید به ' . $phone . ' ارسال شد.');
+		wp_send_json_success('پیامک یادآور ارسال شد.');
+	} else {
+		wp_send_json_error($result['error'] ?: 'ارسال ناموفق بود.');
+	}
+}
+
 // ── AJAX: resend SMS from order box ──────────────────────────────────────────
 
 add_action('wp_ajax_spot_resend_sms', 'spot_ajax_resend_sms');

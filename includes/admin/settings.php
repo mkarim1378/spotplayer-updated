@@ -326,6 +326,27 @@ function spot_admin_page() {
 				</p>
 			</div>
 			<div class="sp-field">
+				<label>متن پیامک قسط میانی <span style="font-weight:normal;color:#646970">(پس از پرداخت قسط ۲، ۳، ... — بدون ارسال کد لایسنس)</span></label>
+				<textarea name="spotplayer[sms_template_installment_mid]" class="sp-sms-template" style="height:100px"><?= esc_textarea(@$sp['sms_template_installment_mid']) ?></textarea>
+				<p class="description" style="margin-top:6px">
+					متغیرها: <code>{customer_name}</code> <code>{course_names}</code> <code>{installment_number}</code> <code>{total_installments}</code> <code>{order_id}</code>
+				</p>
+			</div>
+			<div class="sp-field">
+				<label>متن پیامک قسط آخر <span style="font-weight:normal;color:#646970">(پس از پرداخت آخرین قسط)</span></label>
+				<textarea name="spotplayer[sms_template_installment_final]" class="sp-sms-template" style="height:100px"><?= esc_textarea(@$sp['sms_template_installment_final']) ?></textarea>
+				<p class="description" style="margin-top:6px">
+					متغیرها: <code>{customer_name}</code> <code>{course_names}</code> <code>{total_installments}</code> <code>{order_id}</code>
+				</p>
+			</div>
+			<div class="sp-field">
+				<label>متن پیامک یادآور سررسید <span style="font-weight:normal;color:#646970">(ارسال دستی از داشبورد اقساط)</span></label>
+				<textarea name="spotplayer[sms_template_reminder]" class="sp-sms-template" style="height:100px"><?= esc_textarea(@$sp['sms_template_reminder']) ?></textarea>
+				<p class="description" style="margin-top:6px">
+					متغیرها: <code>{customer_name}</code> <code>{course_names}</code> <code>{next_installment_number}</code> <code>{total_installments}</code> <code>{due_date}</code> <code>{order_id}</code>
+				</p>
+			</div>
+			<div class="sp-field">
 				<label>ارسال پیامک آزمایشی</label>
 				<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
 					<input type="text" id="sp-sms-test-phone" placeholder="09XXXXXXXXX" style="width:160px;direction:ltr;max-width:160px">

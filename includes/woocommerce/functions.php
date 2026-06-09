@@ -122,7 +122,7 @@ function spot_woo_order_license_request(WC_Order $ord, $admin = false): ?array {
 				$lookup_inst['number'],
 				$lookup_inst['total']
 			));
-			spot_sms_trigger_woo($ord);
+			spot_sms_trigger_installment_update($ord, $lookup_inst);
 			return $saved;
 		}
 
