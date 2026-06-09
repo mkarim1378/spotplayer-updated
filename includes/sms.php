@@ -519,6 +519,7 @@ function spot_sms_trigger_installment_update(WC_Order $order, array $inst): void
 			'inst_number'  => intval($inst['number'] ?? 0),
 			'inst_total'   => intval($inst['total'] ?? 0),
 			'attempt'      => 1,
+			'inst_due'     => (string)($inst['due'] ?? ''),
 		]);
 		return;
 	}
@@ -534,8 +535,8 @@ function spot_sms_trigger_installment_update(WC_Order $order, array $inst): void
 		$order->add_order_note('⚠️ ارسال پیامک قسط ناموفق بود: ' . $r['error']);
 }
 
-add_action('spot_sms_inst_update', 'spot_sms_handle_inst_update', 10, 6);
-function spot_sms_handle_inst_update(int $order_id, string $phone, string $template_key, int $inst_number, int $inst_total, int $attempt): void {
+add_action('spot_sms_inst_update', 'spot_sms_handle_inst_update', 10, 7);
+function spot_sms_handle_inst_update(int $order_id, string $phone, string $template_key, int $inst_number, int $inst_total, int $attempt, string $inst_due = ''): void {
 	$order = wc_get_order($order_id);
 	if (!($order instanceof WC_Order)) return;
 
@@ -543,7 +544,7 @@ function spot_sms_handle_inst_update(int $order_id, string $phone, string $templ
 	$text = spot_sms_build_installment_message(
 		(string) ($sp[$template_key] ?? ''),
 		$order,
-		['number' => $inst_number, 'total' => $inst_total]
+		['number' => $inst_number, 'total' => $inst_total, 'due' => $inst_due]
 	);
 
 	if (!trim($text)) { $order->add_order_note('⚠️ قالب پیامک قسط تنظیم نشده — پیامک ارسال نشد.'); return; }
@@ -569,6 +570,7 @@ function spot_sms_handle_inst_update(int $order_id, string $phone, string $templ
 		'inst_number'  => $inst_number,
 		'inst_total'   => $inst_total,
 		'attempt'      => $attempt + 1,
+		'inst_due'     => $inst_due,
 	]);
 }
 

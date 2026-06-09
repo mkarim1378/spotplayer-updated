@@ -133,7 +133,7 @@ function spot_ajax_get_installments(): void {
 			'number' => $num,
 			'total'  => $total,
 			'label'  => $label,
-			'limit'  => $inst['from'] . '-' . $to_raw,
+			'limit'  => ($to_raw === '') ? '' : ($inst['from'] . '-' . $to_raw),
 			'days'   => intval($inst['days'] ?? 0),
 		];
 	}
@@ -239,17 +239,34 @@ add_action('admin_footer', function () {
 				sel.appendChild(opt);
 			});
 
+			var status = document.createElement('span');
+			status.style.cssText = 'display:block;font-size:10px;margin-top:2px;height:14px';
+
 			sel.addEventListener('change', function () {
+				status.textContent = '…';
+				status.style.color = '#646970';
 				var fd = new FormData();
 				fd.append('action',  'spot_save_installment_item');
 				fd.append('nonce',   nonce);
 				fd.append('item_id', itemId);
 				fd.append('data',    sel.value);
-				fetch(ajax, {method: 'POST', body: fd}).catch(function(){});
+				fetch(ajax, {method: 'POST', body: fd})
+					.then(function(r) { return r.json(); })
+					.then(function(res) {
+						status.textContent = res.success ? '✓ ذخیره شد' : '✗ خطا در ذخیره';
+						status.style.color = res.success ? 'green' : '#c00';
+						setTimeout(function() { status.textContent = ''; }, 3000);
+					})
+					.catch(function() {
+						status.textContent = '✗ خطا';
+						status.style.color = '#c00';
+						setTimeout(function() { status.textContent = ''; }, 3000);
+					});
 			});
 
 			wrap.appendChild(lbl);
 			wrap.appendChild(sel);
+			wrap.appendChild(status);
 			nameTd.appendChild(wrap);
 		}
 

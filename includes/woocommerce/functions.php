@@ -21,12 +21,16 @@ function spot_woo_order_installment_items(WC_Order $ord): array {
 		if (!($product instanceof WC_Product)) continue;
 		$cids = array_filter(explode(',', (string) $product->get_meta('_spotplayer_course')));
 		if (count($cids) !== 1) continue;
-		$cid = reset($cids);
+		$cid   = reset($cids);
+		$limit = (string) $item->get_meta('_spot_installment_limit');
+		// Normalize legacy "N-" (empty to) stored before v24.13 fix — treat as full access
+		if (substr($limit, -1) === '-') $limit = '';
 		$result[$cid] = [
 			'number' => $number,
 			'total'  => intval($item->get_meta('_spot_installment_total')),
-			'limit'  => (string) $item->get_meta('_spot_installment_limit'),
+			'limit'  => $limit,
 			'days'   => intval($item->get_meta('_spot_installment_days')),
+			'due'    => (string) $item->get_meta('_spot_installment_due'),
 		];
 	}
 	return $result;
@@ -105,7 +109,9 @@ function spot_woo_order_license_request(WC_Order $ord, $admin = false): ?array {
 			}
 
 			$suffix   = ' قسط ' . $lookup_inst['number'] . ' از ' . $lookup_inst['total'];
-			$api_name = (isset($data['name']) ? $data['name'] : '') . $suffix;
+			// Strip any previous installment suffix from the stored license name before appending new one
+			$base_name = preg_replace('/\s*قسط\s*\d+\s*از\s*\d+\s*$/', '', (string)($prev_data['name'] ?? ''));
+			$api_name  = $base_name . $suffix;
 
 			$rep = spot_request(
 				'https://panel.spotplayer.ir/license/edit/' . $license_id,
