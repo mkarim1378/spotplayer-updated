@@ -13,9 +13,20 @@ function spot_admin_order_box($data, $order = null) {
 		($status === 'processing' && !@$sp['completed'])
 	);
 
+	// Per-order test flag — falls back to global setting if not set on the order
+	$raw_test  = $order ? $order->get_meta('_spot_test') : '';
+	$is_test   = $raw_test !== '' ? (bool) $raw_test : (bool) @$sp['test'];
+	$test_attr = $is_test ? 'checked' : '';
+
 	// ── حالت ۱: در حال ایجاد لایسنس ─────────────────────────────────────────
 	if ($auto_create) {
-		$nonce = wp_create_nonce('spot_auto_create_' . $order->get_id()); ?>
+		$nonce_create = wp_create_nonce('spot_auto_create_' . $order->get_id());
+		$nonce_flag   = wp_create_nonce('spot_set_test_' . $order->get_id()); ?>
+		<div style="margin-bottom:8px;font-size:12px">
+			<label style="cursor:pointer">
+				<input type="checkbox" id="spot-test-flag" <?= $test_attr ?>> لایسنس تستی
+			</label>
+		</div>
 		<div id="spot-creating" style="text-align:center;padding:8px 0">
 			<div id="spot-spin" style="display:inline-block;width:20px;height:20px;border:3px solid #ddd;border-top-color:#2271b1;border-radius:50%;animation:spot-spin .8s linear infinite;vertical-align:middle"></div>
 			<span id="spot-msg" style="margin-right:8px;color:#444;font-size:13px">در حال ایجاد لایسنس…</span>
@@ -27,24 +38,36 @@ function spot_admin_order_box($data, $order = null) {
 		<style>@keyframes spot-spin{to{transform:rotate(360deg)}}</style>
 		<script>(function(){
 			var ajax=<?= json_encode(admin_url('admin-ajax.php')) ?>,
-				nonce=<?= json_encode($nonce) ?>,
+				nonceCreate=<?= json_encode($nonce_create) ?>,
+				nonceFlag=<?= json_encode($nonce_flag) ?>,
 				oid=<?= (int) $order->get_id() ?>;
+
+			function saveFlag(done){
+				var fd=new FormData();
+				fd.append('action','spot_set_test_flag');
+				fd.append('order_id',oid);
+				fd.append('nonce',nonceFlag);
+				fd.append('test',document.getElementById('spot-test-flag').checked?1:0);
+				fetch(ajax,{method:'POST',body:fd}).then(done).catch(done);
+			}
 
 			function go(){
 				document.getElementById('spot-spin').style.display='inline-block';
 				document.getElementById('spot-msg').style.display='inline';
 				document.getElementById('spot-err').style.display='none';
-				var fd=new FormData();
-				fd.append('action','spot_auto_create');
-				fd.append('order_id',oid);
-				fd.append('nonce',nonce);
-				fetch(ajax,{method:'POST',body:fd})
-					.then(function(r){return r.json()})
-					.then(function(res){
-						if(res.success||res.data==='reload'){location.reload()}
-						else{showErr(typeof res.data==='string'?res.data:'خطای نامشخص')}
-					})
-					.catch(function(){showErr('خطا در ارتباط با سرور')});
+				saveFlag(function(){
+					var fd=new FormData();
+					fd.append('action','spot_auto_create');
+					fd.append('order_id',oid);
+					fd.append('nonce',nonceCreate);
+					fetch(ajax,{method:'POST',body:fd})
+						.then(function(r){return r.json()})
+						.then(function(res){
+							if(res.success||res.data==='reload'){location.reload()}
+							else{showErr(typeof res.data==='string'?res.data:'خطای نامشخص')}
+						})
+						.catch(function(){showErr('خطا در ارتباط با سرور')});
+				});
 			}
 
 			function showErr(msg){
@@ -99,5 +122,66 @@ function spot_admin_order_box($data, $order = null) {
 	}
 
 	// ── حالت ۳: لایسنس ندارد (وضعیت‌های دیگر) ───────────────────────────────
+	if ($order) {
+		$nonce_create = wp_create_nonce('spot_auto_create_' . $order->get_id());
+		$nonce_flag   = wp_create_nonce('spot_set_test_' . $order->get_id()); ?>
+		<p style="color:#888;font-size:12px;margin:0 0 8px">لایسنس هنوز ایجاد نشده است.</p>
+		<div style="margin-bottom:8px;font-size:12px">
+			<label style="cursor:pointer">
+				<input type="checkbox" id="spot-test-flag" <?= $test_attr ?>> لایسنس تستی
+			</label>
+		</div>
+		<button type="button" class="button button-primary" id="spot-create-btn" style="width:100%;text-align:center">ایجاد لایسنس</button>
+		<div id="spot-create-err" style="display:none;color:#c00;font-size:12px;margin-top:6px"></div>
+		<script>(function(){
+			var ajax=<?= json_encode(admin_url('admin-ajax.php')) ?>,
+				nonceCreate=<?= json_encode($nonce_create) ?>,
+				nonceFlag=<?= json_encode($nonce_flag) ?>,
+				oid=<?= (int) $order->get_id() ?>;
+
+			var btn=document.getElementById('spot-create-btn');
+			var errEl=document.getElementById('spot-create-err');
+			var cb=document.getElementById('spot-test-flag');
+
+			btn.addEventListener('click',function(){
+				btn.disabled=true;
+				btn.textContent='در حال ایجاد…';
+				errEl.style.display='none';
+
+				var fd1=new FormData();
+				fd1.append('action','spot_set_test_flag');
+				fd1.append('order_id',oid);
+				fd1.append('nonce',nonceFlag);
+				fd1.append('test',cb.checked?1:0);
+
+				fetch(ajax,{method:'POST',body:fd1})
+					.then(function(){
+						var fd2=new FormData();
+						fd2.append('action','spot_auto_create');
+						fd2.append('order_id',oid);
+						fd2.append('nonce',nonceCreate);
+						return fetch(ajax,{method:'POST',body:fd2});
+					})
+					.then(function(r){return r.json()})
+					.then(function(res){
+						if(res.success||res.data==='reload'){location.reload()}
+						else{
+							btn.disabled=false;
+							btn.textContent='ایجاد لایسنس';
+							errEl.textContent=typeof res.data==='string'?res.data:'خطای نامشخص';
+							errEl.style.display='block';
+						}
+					})
+					.catch(function(){
+						btn.disabled=false;
+						btn.textContent='ایجاد لایسنس';
+						errEl.textContent='خطا در ارتباط با سرور';
+						errEl.style.display='block';
+					});
+			});
+		})();</script>
+		<?php return;
+	}
+
 	echo '<p style="color:#888;font-size:12px;margin:0">لایسنس هنوز ایجاد نشده است.</p>';
 }

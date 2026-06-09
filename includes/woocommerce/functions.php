@@ -160,7 +160,7 @@ function spot_woo_order_license_request(WC_Order $ord, $admin = false): ?array {
 			}
 		}
 
-		$rep = spot_request_license_put($req_data);
+		$rep = spot_request_license_put($req_data, $ord);
 		if (!($id = @$rep['_id'])) throw new Exception('پاسخ نامعتبر از سرور', 999);
 
 		$ord->update_meta_data('_spotplayer_data', $data = array_merge($data, $rep));
@@ -219,6 +219,19 @@ function spot_auto_license_on_completed($order_id): void {
 }
 
 // ── AJAX auto-create (admin order box + customer order page fallback) ─────────
+
+add_action('wp_ajax_spot_set_test_flag', 'spot_ajax_set_test_flag');
+function spot_ajax_set_test_flag(): void {
+	$order_id = intval($_POST['order_id'] ?? 0);
+	if (!current_user_can('manage_woocommerce')) wp_send_json_error('unauthorized');
+	if (!wp_verify_nonce(sanitize_text_field($_POST['nonce'] ?? ''), 'spot_set_test_' . $order_id))
+		wp_send_json_error('nonce');
+	$order = wc_get_order($order_id);
+	if (!$order) wp_send_json_error('not_found');
+	$order->update_meta_data('_spot_test', intval($_POST['test'] ?? 0) ? 1 : 0);
+	$order->save_meta_data();
+	wp_send_json_success();
+}
 
 add_action('wp_ajax_spot_auto_create',        'spot_ajax_auto_create');
 add_action('wp_ajax_nopriv_spot_auto_create', 'spot_ajax_auto_create');

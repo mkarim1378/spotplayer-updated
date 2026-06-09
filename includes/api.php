@@ -61,8 +61,10 @@ function spot_ajax_test_api(): void {
 }
 
 /** @throws Exception */
-function spot_request_license_put($j) {
+function spot_request_license_put($j, ?WC_Order $order = null) {
 	if (!$j['name']) throw new Exception('نام لایسنس خالی بود.', 999);
 	if (!$j['watermark']['texts'][0]['text']) throw new Exception('واترمارک لایسنس خالی بود.', 999);
-	return spot_request('https://panel.spotplayer.ir/license/edit/', array_merge($j, ['test' => @get_option('spotplayer')['test'] ? 1 : 0]));
+	$raw_test = $order ? $order->get_meta('_spot_test') : '';
+	$is_test  = $raw_test !== '' ? (bool) $raw_test : (bool) @get_option('spotplayer')['test'];
+	return spot_request('https://panel.spotplayer.ir/license/edit/', array_merge($j, ['test' => $is_test ? 1 : 0]));
 }
