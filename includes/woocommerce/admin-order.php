@@ -1,15 +1,28 @@
 <?php
 if (!defined('ABSPATH')) exit;
 
+function spot_woo_get_current_order(): ?WC_Order {
+	if (!function_exists('wc_get_order')) return null;
+	// HPOS: order ID in $_GET['id']; Classic: in $_GET['post'] or $post global
+	$order_id = absint($_GET['id'] ?? 0)
+		?: absint($_GET['post'] ?? 0)
+		?: absint($GLOBALS['post']->ID ?? 0);
+	if (!$order_id) return null;
+	$order = wc_get_order($order_id);
+	return $order instanceof WC_Order ? $order : null;
+}
+
 function spot_woo_admin_order() {
-	if (function_exists('wc_get_order') && count(spot_woo_order_items(wc_get_order() ?: null))) add_meta_box(
-		'sp-order', 'اسپات پلیر', 'spot_woo_admin_order_box', null, 'side', 'high');
+	$order = spot_woo_get_current_order();
+	if ($order && count(spot_woo_order_items($order))) {
+		add_meta_box('sp-order', 'اسپات پلیر', 'spot_woo_admin_order_box', null, 'side', 'high');
+	}
 }
 add_action('add_meta_boxes', 'spot_woo_admin_order');
 
 function spot_woo_admin_order_box() {
-	$order = wc_get_order();
-	spot_admin_order_box(spot_woo_license_data($order), $order);
+	$order = spot_woo_get_current_order();
+	spot_admin_order_box($order ? spot_woo_license_data($order) : [], $order);
 }
 
 // ── License copy button in orders list ───────────────────────────────────────
