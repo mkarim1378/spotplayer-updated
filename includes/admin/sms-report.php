@@ -241,7 +241,7 @@ function spot_sms_report_render(): void {
 						<td style="direction:ltr;text-align:right"><?= $phone ? esc_html($phone) : '<span style="color:#999">—</span>' ?></td>
 						<td><?= $badge($m1s, $m1a) ?></td>
 						<td><?= $badge($m2s, $m2a) ?></td>
-						<td><?= $sent_ts ? esc_html(date_i18n('Y/m/d H:i', $sent_ts)) : '<span style="color:#999">—</span>' ?></td>
+						<td><?= $sent_ts ? esc_html(wp_date('Y/m/d H:i', $sent_ts)) : '<span style="color:#999">—</span>' ?></td>
 						<td style="text-align:center"><?= max($m1a, $m2a) ?: '<span style="color:#999">—</span>' ?></td>
 						<td>
 							<?php if ($is_resendable): ?>

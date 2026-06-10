@@ -427,7 +427,7 @@ function spot_sms_admin_section($order, int $order_id, string $platform): void {
 	$m2t = (int)    $order->get_meta('_spot_sms_msg2_sent_at');
 
 	$fmt = function(string $s, int $a, int $t): string {
-		if ($s === 'sent')      return '✅ ارسال شد' . ($t ? ' — ' . date_i18n('Y/m/d H:i', $t) : '');
+		if ($s === 'sent')      return '✅ ارسال شد' . ($t ? ' — ' . wp_date('Y/m/d H:i', $t) : '');
 		if ($s === 'failed')    return '⚠️ ارسال نشد (' . $a . ' بار تلاش)';
 		if ($s === 'abandoned') return '🛑 متوقف شد (' . $a . ' بار تلاش)';
 		if ($s === 'blocked')   return '⏸ در انتظار پیامک اول';

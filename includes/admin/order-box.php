@@ -144,6 +144,18 @@ function spot_admin_order_box($data, $order = null) {
 			var errEl=document.getElementById('spot-create-err');
 			var cb=document.getElementById('spot-test-flag');
 
+			// Persist the test-flag immediately so it's already saved if the order
+			// is later marked completed via WooCommerce's own "Update" button
+			// (which triggers automatic license creation without going through this box).
+			cb.addEventListener('change',function(){
+				var fd=new FormData();
+				fd.append('action','spot_set_test_flag');
+				fd.append('order_id',oid);
+				fd.append('nonce',nonceFlag);
+				fd.append('test',cb.checked?1:0);
+				fetch(ajax,{method:'POST',body:fd});
+			});
+
 			btn.addEventListener('click',function(){
 				btn.disabled=true;
 				btn.textContent='در حال ایجاد…';
