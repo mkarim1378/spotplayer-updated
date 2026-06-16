@@ -29,6 +29,53 @@ function spot_extra_render_page(): void {
 		wp_safe_redirect(wc_get_account_endpoint_url('dashboard'));
 		exit;
 	}
+	?>
+	<style>
+	.spot-extra-wrap { max-width:640px; direction:rtl; }
+	.spot-extra-form {
+		background:#fff; border:1px solid #e2e8f0; border-radius:8px;
+		padding:28px; margin-bottom:28px;
+		box-shadow:0 1px 4px rgba(0,0,0,.07);
+	}
+	.spot-extra-form .form-row { margin-bottom:18px; }
+	.spot-extra-form .form-row > label {
+		display:block; font-weight:600; margin-bottom:6px;
+		color:#374151; font-size:14px;
+	}
+	.spot-extra-form .input-text,
+	.spot-extra-form select {
+		border:1px solid #d1d5db; border-radius:5px;
+		padding:9px 12px; font-size:14px;
+		width:100%; max-width:360px; box-sizing:border-box;
+	}
+	.spot-extra-form .input-text:focus,
+	.spot-extra-form select:focus {
+		border-color:#6366f1; outline:none;
+		box-shadow:0 0 0 3px rgba(99,102,241,.15);
+	}
+	#spot-extra-price-row {
+		background:#f0fdf4; border:1px solid #bbf7d0;
+		border-radius:6px; padding:14px 16px; margin-bottom:18px;
+	}
+	#spot-extra-price-row > label { color:#166534; }
+	#spot-extra-price { font-size:18px; font-weight:700; color:#15803d; }
+	#spot-extra-stage { font-size:12px; color:#6b7280; margin-right:6px; }
+	#spot-extra-submit-btn {
+		background:#4f46e5; border-color:#4338ca; color:#fff;
+		padding:10px 24px; font-size:15px; border-radius:6px; cursor:pointer;
+	}
+	#spot-extra-submit-btn:hover:not(:disabled) { background:#4338ca; }
+	#spot-extra-submit-btn:disabled {
+		background:#9ca3af; border-color:#9ca3af; cursor:not-allowed;
+	}
+	.spot-extra-history { width:100%; border-collapse:collapse; font-size:13px; }
+	.spot-extra-history th {
+		background:#f9fafb; padding:8px 12px;
+		border:1px solid #e5e7eb; font-weight:600;
+	}
+	.spot-extra-history td { padding:8px 12px; border:1px solid #e5e7eb; }
+	</style>
+	<?php
 
 	$uid      = get_current_user_id();
 	$customer = new WC_Customer($uid);
@@ -99,7 +146,7 @@ function spot_extra_render_page(): void {
 		$base_label = implode('، ', $names) ?: 'سفارش #' . $oid;
 
 		$has_pending = isset($pending_set[$oid]);
-		$calc        = spot_extra_calc_price_from_count($oid, $paid_counts[$oid] ?? 0, $ord);
+		$calc        = spot_extra_calc_price_from_count($oid, $paid_counts[$oid] ?? 0, $ord, spot_extra_resolve_course_config($ord));
 		$is_blocked  = $calc['blocked'] || $has_pending;
 
 		if ($has_pending) {
@@ -366,16 +413,45 @@ function spot_extra_origin_total(int $origin_order_id): float {
 	return $total;
 }
 
+// ── Helper: resolve per-course pricing config ─────────────────────────────────
+
+/**
+ * Returns ['stages' => [...], 'end_mode' => 'max'|'repeat_last'] for the
+ * most specific match: course-specific → global fallback.
+ */
+function spot_extra_resolve_course_config(?WC_Order $origin_order): array {
+	$sp  = get_option('spotplayer', []);
+	$map = (array) ($sp['extra_course_stages'] ?? []);
+
+	if ($origin_order && !empty($map)) {
+		foreach (spot_woo_order_items($origin_order) as $cid) {
+			if (!empty($map[$cid]['stages'])) {
+				return [
+					'stages'   => array_values($map[$cid]['stages']),
+					'end_mode' => $map[$cid]['end_mode'] ?? 'max',
+				];
+			}
+		}
+	}
+
+	return [
+		'stages'   => array_values((array) ($sp['extra_stages'] ?? [])),
+		'end_mode' => $sp['extra_end_mode'] ?? 'max',
+	];
+}
+
 // ── Helper: calculate price and stage — core logic ───────────────────────────
 
 /**
- * Compute price/stage given a pre-known paid count and optionally a pre-loaded
- * WC_Order object (avoids re-fetching the order for percent calculation).
+ * Compute price/stage given a pre-known paid count, optionally a pre-loaded
+ * WC_Order, and optionally a pre-resolved config (avoids repeated option reads).
  */
-function spot_extra_calc_price_from_count(int $origin_order_id, int $paid_count, ?WC_Order $origin_order = null): array {
-	$sp     = get_option('spotplayer', []);
-	$stages = array_values((array) ($sp['extra_stages'] ?? []));
-	$mode   = $sp['extra_end_mode'] ?? 'max';
+function spot_extra_calc_price_from_count(int $origin_order_id, int $paid_count, ?WC_Order $origin_order = null, ?array $config = null): array {
+	if ($config === null) {
+		$config = spot_extra_resolve_course_config($origin_order);
+	}
+	$stages = $config['stages'];
+	$mode   = $config['end_mode'];
 	$stage  = $paid_count + 1;
 
 	if (empty($stages)) return ['blocked' => true, 'stage' => $stage, 'price' => 0.0];
@@ -412,9 +488,13 @@ function spot_extra_calc_price_from_count(int $origin_order_id, int $paid_count,
 // ── Helper: calculate price and stage for an origin order ────────────────────
 
 function spot_extra_calc_price(int $origin_order_id): array {
+	$origin_order = wc_get_order($origin_order_id);
+	$order        = ($origin_order instanceof WC_Order) ? $origin_order : null;
 	return spot_extra_calc_price_from_count(
 		$origin_order_id,
-		spot_extra_count_paid_requests($origin_order_id)
+		spot_extra_count_paid_requests($origin_order_id),
+		$order,
+		spot_extra_resolve_course_config($order)
 	);
 }
 

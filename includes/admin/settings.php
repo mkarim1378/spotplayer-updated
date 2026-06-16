@@ -121,6 +121,7 @@ function spot_admin_page() {
 	// ── پردازش فرم دسترسی اضافه ─────────────────────────────────────────────
 	$extra_notice = '';
 	if (isset($_POST['spot_save_extra']) && check_admin_referer('spot_save_extra', 'spot_extra_nonce')) {
+		// Global fallback stages
 		$stages = [];
 		foreach ((array)($_POST['spot_extra_stages'] ?? []) as $row) {
 			$type  = sanitize_key($row['type'] ?? '');
@@ -131,9 +132,27 @@ function spot_admin_page() {
 		$end_mode = sanitize_key($_POST['spot_extra_end_mode'] ?? 'max');
 		if (!in_array($end_mode, ['max', 'repeat_last'], true)) $end_mode = 'max';
 
+		// Per-course stages
+		$course_stages = [];
+		foreach ((array)($_POST['spot_extra_course_stages'] ?? []) as $raw_cid => $data) {
+			$cid = sanitize_text_field($raw_cid);
+			if (empty($cid)) continue;
+			$cstages = [];
+			foreach ((array)($data['stages'] ?? []) as $row) {
+				$type  = sanitize_key($row['type'] ?? '');
+				$value = floatval($row['value'] ?? 0);
+				if (!in_array($type, ['fixed', 'percent'], true) || $value <= 0) continue;
+				$cstages[] = ['type' => $type, 'value' => $value];
+			}
+			$cmode = sanitize_key($data['end_mode'] ?? 'max');
+			if (!in_array($cmode, ['max', 'repeat_last'], true)) $cmode = 'max';
+			$course_stages[$cid] = ['stages' => $cstages, 'end_mode' => $cmode];
+		}
+
 		$sp_opt = get_option('spotplayer', []);
-		$sp_opt['extra_stages']   = $stages;
-		$sp_opt['extra_end_mode'] = $end_mode;
+		$sp_opt['extra_stages']        = $stages;
+		$sp_opt['extra_end_mode']      = $end_mode;
+		$sp_opt['extra_course_stages'] = $course_stages;
 		update_option('spotplayer', $sp_opt);
 		$sp = $sp_opt;
 
@@ -184,6 +203,14 @@ function spot_admin_page() {
 	.sp-end-mode-opt { display:flex; align-items:flex-start; gap:10px; padding:10px 14px; border-radius:3px; background:#f9f9f9; border:1px solid #f0f0f1; margin-bottom:8px; cursor:pointer; }
 	.sp-end-mode-opt:last-child { margin-bottom:0; }
 	.sp-end-mode-opt input[type=radio] { margin-top:3px; flex-shrink:0; }
+	/* ── Per-course accordion ── */
+	.sp-course-extra { border:1px solid #dcdcde; border-radius:4px; margin-bottom:10px; }
+	.sp-course-extra > summary { cursor:pointer; padding:10px 14px; background:#f6f7f7; border-radius:4px; list-style:none; display:flex; align-items:center; gap:8px; }
+	.sp-course-extra > summary::-webkit-details-marker { display:none; }
+	.sp-course-extra > summary::before { content:'▶'; font-size:10px; margin-left:4px; transition:transform .15s; display:inline-block; }
+	.sp-course-extra[open] > summary::before { transform:rotate(90deg); }
+	.sp-course-extra-body { padding:14px 16px 18px; }
+	.sp-extra-fallback { border-style:dashed; margin-top:16px; }
 	/* ── Tabs ── */
 	.sp-tabs-nav { display:flex; border-bottom:2px solid #c3c4c7; margin-bottom:24px; gap:0; }
 	.sp-tab-btn { padding:9px 20px; border:1px solid transparent; border-bottom:none; background:none; cursor:pointer; font-size:13px; border-radius:4px 4px 0 0; margin-bottom:-2px; color:#646970; font-family:inherit; }
@@ -594,57 +621,121 @@ function spot_admin_page() {
 		<?= $extra_notice ?>
 
 		<div class="sp-card">
-			<h2>💳 هزینه دسترسی اضافه لایسنس</h2>
-			<p style="margin-top:0;color:#646970;font-size:13px">وقتی کاربری برای اولین بار درخواست دسترسی اضافه می‌دهد هزینه‌ی پله اول دریافت می‌شود؛ دفعه دوم پله دوم، و به همین ترتیب.</p>
+			<h2>💳 هزینه دسترسی اضافه لایسنس — به ازای هر دوره</h2>
+			<p style="margin-top:0;color:#646970;font-size:13px">برای هر دوره پله‌های قیمت جداگانه تعریف کنید. اگر دوره‌ای پله‌ای نداشته باشد، از بخش «پیش‌فرض» در انتها استفاده می‌شود.</p>
+
 			<form method="post">
 				<?php wp_nonce_field('spot_save_extra', 'spot_extra_nonce') ?>
 				<input type="hidden" name="spot_save_extra" value="1">
 
-				<table class="sp-stages-table">
-					<thead><tr>
-						<th style="width:12%">پله</th>
-						<th style="width:40%">نوع</th>
-						<th style="width:33%">مقدار</th>
-						<th style="width:15%"></th>
-					</tr></thead>
-					<tbody id="sp-stages-tbody">
-					<?php
-					$saved_stages = $sp['extra_stages'] ?? [];
-					foreach ($saved_stages as $si => $stage) { ?>
-						<tr>
-							<td style="text-align:center;font-weight:600;color:#646970"><?= $si + 1 ?></td>
-							<td>
-								<select name="spot_extra_stages[<?= $si ?>][type]">
-									<option value="fixed"   <?= ($stage['type'] ?? '') === 'fixed'   ? 'selected' : '' ?>>مبلغ ثابت (تومان)</option>
-									<option value="percent" <?= ($stage['type'] ?? '') === 'percent' ? 'selected' : '' ?>>درصد از مجموع سفارش</option>
-								</select>
-							</td>
-							<td><input type="number" name="spot_extra_stages[<?= $si ?>][value]" value="<?= esc_attr($stage['value'] ?? '') ?>" min="0" step="any" placeholder="مثلاً 500000"></td>
-							<td><button type="button" class="button sp-stage-remove">✕</button></td>
-						</tr>
-					<?php } ?>
-					</tbody>
-				</table>
-				<button type="button" id="sp-add-stage" class="button">+ افزودن پله</button>
+				<?php
+				$all_courses   = get_option('spot_courses', []);
+				$course_stages = $sp['extra_course_stages'] ?? [];
 
-				<hr style="margin:20px 0;border:none;border-top:1px solid #f0f0f1">
+				if (empty($all_courses)): ?>
+					<div class="notice notice-warning inline"><p>ابتدا دوره‌ها را در تب «دوره‌ها» تعریف کنید.</p></div>
+				<?php else:
+					foreach ($all_courses as $course):
+						$cid    = $course['id']   ?? '';
+						$cname  = $course['name'] ?? $cid;
+						$cdata  = $course_stages[$cid] ?? [];
+						$cstages = $cdata['stages']   ?? [];
+						$cmode   = $cdata['end_mode'] ?? 'max';
+						$has_stages = !empty($cstages);
+				?>
+				<details class="sp-course-extra" <?= $has_stages ? 'open' : '' ?>>
+					<summary>
+						<strong><?= esc_html($cname) ?></strong>
+						<small style="color:#646970;font-family:monospace;font-size:11px"><?= esc_html($cid) ?></small>
+						<?php if ($has_stages): ?>
+							<span style="color:#2a7a2a;font-size:11px;font-weight:600"><?= count($cstages) ?> پله</span>
+						<?php else: ?>
+							<span style="color:#999;font-size:11px">بدون پله — از پیش‌فرض استفاده می‌شود</span>
+						<?php endif; ?>
+					</summary>
+					<div class="sp-course-extra-body">
+						<table class="sp-stages-table">
+							<thead><tr>
+								<th style="width:12%">پله</th>
+								<th style="width:40%">نوع</th>
+								<th style="width:33%">مقدار</th>
+								<th style="width:15%"></th>
+							</tr></thead>
+							<tbody class="sp-stages-tbody" data-cid="<?= esc_attr($cid) ?>">
+							<?php foreach ($cstages as $si => $stage): ?>
+								<tr>
+									<td style="text-align:center;font-weight:600;color:#646970"><?= $si + 1 ?></td>
+									<td>
+										<select name="spot_extra_course_stages[<?= esc_attr($cid) ?>][stages][<?= $si ?>][type]">
+											<option value="fixed"   <?= ($stage['type'] ?? '') === 'fixed'   ? 'selected' : '' ?>>مبلغ ثابت (تومان)</option>
+											<option value="percent" <?= ($stage['type'] ?? '') === 'percent' ? 'selected' : '' ?>>درصد از مجموع سفارش</option>
+										</select>
+									</td>
+									<td><input type="number" name="spot_extra_course_stages[<?= esc_attr($cid) ?>][stages][<?= $si ?>][value]" value="<?= esc_attr($stage['value'] ?? '') ?>" min="0" step="any" placeholder="مثلاً 500000"></td>
+									<td><button type="button" class="button sp-stage-remove">✕</button></td>
+								</tr>
+							<?php endforeach; ?>
+							</tbody>
+						</table>
+						<button type="button" class="button sp-add-stage-course">+ افزودن پله</button>
 
-				<p style="font-weight:600;margin:0 0 8px">رفتار بعد از آخرین پله</p>
-				<?php $end_mode = $sp['extra_end_mode'] ?? 'max'; ?>
-				<label class="sp-end-mode-opt">
-					<input type="radio" name="spot_extra_end_mode" value="max" <?= $end_mode === 'max' ? 'checked' : '' ?>>
-					<div>
-						<span style="font-weight:600;display:block;margin-bottom:2px">حداکثر N بار</span>
-						<span style="color:#646970;font-size:12px">بعد از پرداخت آخرین پله، ثبت درخواست جدید ممکن نخواهد بود. N برابر تعداد پله‌های تعریف‌شده است.</span>
+						<hr style="margin:14px 0;border:none;border-top:1px solid #f0f0f1">
+						<p style="font-weight:600;margin:0 0 8px;font-size:13px">رفتار بعد از آخرین پله</p>
+						<label class="sp-end-mode-opt">
+							<input type="radio" name="spot_extra_course_stages[<?= esc_attr($cid) ?>][end_mode]" value="max" <?= $cmode === 'max' ? 'checked' : '' ?>>
+							<div><span style="font-weight:600;display:block;margin-bottom:2px">حداکثر N بار</span><span style="color:#646970;font-size:12px">بعد از آخرین پله، ثبت درخواست جدید ممکن نخواهد بود.</span></div>
+						</label>
+						<label class="sp-end-mode-opt">
+							<input type="radio" name="spot_extra_course_stages[<?= esc_attr($cid) ?>][end_mode]" value="repeat_last" <?= $cmode === 'repeat_last' ? 'checked' : '' ?>>
+							<div><span style="font-weight:600;display:block;margin-bottom:2px">تکرار قیمت پله آخر</span><span style="color:#646970;font-size:12px">از پله آخر به بعد همان مبلغ اعمال می‌شود.</span></div>
+						</label>
 					</div>
-				</label>
-				<label class="sp-end-mode-opt">
-					<input type="radio" name="spot_extra_end_mode" value="repeat_last" <?= $end_mode === 'repeat_last' ? 'checked' : '' ?>>
-					<div>
-						<span style="font-weight:600;display:block;margin-bottom:2px">تکرار قیمت پله آخر</span>
-						<span style="color:#646970;font-size:12px">از پله آخر به بعد، همان مبلغ برای همه‌ی درخواست‌های بعدی اعمال می‌شود و محدودیتی در تعداد دفعات وجود ندارد.</span>
+				</details>
+				<?php endforeach; endif; ?>
+
+				<!-- ── پیش‌فرض (fallback) ── -->
+				<details class="sp-course-extra sp-extra-fallback">
+					<summary>
+						<strong>پیش‌فرض</strong>
+						<small style="color:#646970;font-size:11px">برای سفارش‌هایی که دوره‌شان پله تعریف‌شده ندارد</small>
+					</summary>
+					<div class="sp-course-extra-body">
+						<table class="sp-stages-table">
+							<thead><tr>
+								<th style="width:12%">پله</th><th style="width:40%">نوع</th><th style="width:33%">مقدار</th><th style="width:15%"></th>
+							</tr></thead>
+							<tbody id="sp-stages-tbody">
+							<?php
+							$saved_stages = $sp['extra_stages'] ?? [];
+							foreach ($saved_stages as $si => $stage): ?>
+								<tr>
+									<td style="text-align:center;font-weight:600;color:#646970"><?= $si + 1 ?></td>
+									<td>
+										<select name="spot_extra_stages[<?= $si ?>][type]">
+											<option value="fixed"   <?= ($stage['type'] ?? '') === 'fixed'   ? 'selected' : '' ?>>مبلغ ثابت (تومان)</option>
+											<option value="percent" <?= ($stage['type'] ?? '') === 'percent' ? 'selected' : '' ?>>درصد از مجموع سفارش</option>
+										</select>
+									</td>
+									<td><input type="number" name="spot_extra_stages[<?= $si ?>][value]" value="<?= esc_attr($stage['value'] ?? '') ?>" min="0" step="any" placeholder="مثلاً 500000"></td>
+									<td><button type="button" class="button sp-stage-remove">✕</button></td>
+								</tr>
+							<?php endforeach; ?>
+							</tbody>
+						</table>
+						<button type="button" id="sp-add-stage" class="button">+ افزودن پله</button>
+						<hr style="margin:14px 0;border:none;border-top:1px solid #f0f0f1">
+						<p style="font-weight:600;margin:0 0 8px;font-size:13px">رفتار بعد از آخرین پله</p>
+						<?php $end_mode = $sp['extra_end_mode'] ?? 'max'; ?>
+						<label class="sp-end-mode-opt">
+							<input type="radio" name="spot_extra_end_mode" value="max" <?= $end_mode === 'max' ? 'checked' : '' ?>>
+							<div><span style="font-weight:600;display:block;margin-bottom:2px">حداکثر N بار</span><span style="color:#646970;font-size:12px">بعد از آخرین پله، ثبت درخواست جدید ممکن نخواهد بود.</span></div>
+						</label>
+						<label class="sp-end-mode-opt">
+							<input type="radio" name="spot_extra_end_mode" value="repeat_last" <?= $end_mode === 'repeat_last' ? 'checked' : '' ?>>
+							<div><span style="font-weight:600;display:block;margin-bottom:2px">تکرار قیمت پله آخر</span><span style="color:#646970;font-size:12px">از پله آخر به بعد همان مبلغ اعمال می‌شود.</span></div>
+						</label>
 					</div>
-				</label>
+				</details>
 
 				<p style="margin-top:20px">
 					<?php submit_button('ذخیره تنظیمات دسترسی اضافه', 'primary', 'spot_extra_submit', false) ?>
@@ -883,41 +974,68 @@ function spot_admin_page() {
 		})();
 		<?php } ?>
 
-		// ── جدول پله‌های دسترسی اضافه ──────────────────────────────────────
+		// ── جدول پله‌های دسترسی اضافه (per-course + global fallback) ────────
 		(function () {
-			var tbody  = document.getElementById('sp-stages-tbody');
-			var addBtn = document.getElementById('sp-add-stage');
-			if (!tbody || !addBtn) return;
-
-			function reindex() {
+			function reindex(tbody) {
+				var cid = tbody.dataset.cid || null; // null = global fallback
 				tbody.querySelectorAll('tr').forEach(function (tr, i) {
 					tr.querySelector('td:first-child').textContent = i + 1;
-					tr.querySelector('select').name = 'spot_extra_stages[' + i + '][type]';
-					tr.querySelector('input[type=number]').name = 'spot_extra_stages[' + i + '][value]';
+					if (cid) {
+						tr.querySelector('select').name = 'spot_extra_course_stages[' + cid + '][stages][' + i + '][type]';
+						tr.querySelector('input[type=number]').name = 'spot_extra_course_stages[' + cid + '][stages][' + i + '][value]';
+					} else {
+						tr.querySelector('select').name = 'spot_extra_stages[' + i + '][type]';
+						tr.querySelector('input[type=number]').name = 'spot_extra_stages[' + i + '][value]';
+					}
 				});
 			}
 
-			function bindRemove(btn) {
-				btn.addEventListener('click', function () { btn.closest('tr').remove(); reindex(); });
-			}
-
-			function makeRow() {
-				var i  = tbody.querySelectorAll('tr').length;
-				var tr = document.createElement('tr');
+			function makeRow(tbody) {
+				var cid = tbody.dataset.cid || null;
+				var i   = tbody.querySelectorAll('tr').length;
+				var tr  = document.createElement('tr');
+				var sName = cid
+					? 'spot_extra_course_stages[' + cid + '][stages][' + i + '][type]'
+					: 'spot_extra_stages[' + i + '][type]';
+				var vName = cid
+					? 'spot_extra_course_stages[' + cid + '][stages][' + i + '][value]'
+					: 'spot_extra_stages[' + i + '][value]';
 				tr.innerHTML =
 					'<td style="text-align:center;font-weight:600;color:#646970">' + (i + 1) + '</td>'
-					+ '<td><select name="spot_extra_stages[' + i + '][type]">'
+					+ '<td><select name="' + sName + '">'
 					+ '<option value="fixed">مبلغ ثابت (تومان)</option>'
 					+ '<option value="percent">درصد از مجموع سفارش</option>'
 					+ '</select></td>'
-					+ '<td><input type="number" name="spot_extra_stages[' + i + '][value]" min="0" step="any" placeholder="مثلاً 500000"></td>'
+					+ '<td><input type="number" name="' + vName + '" min="0" step="any" placeholder="مثلاً 500000"></td>'
 					+ '<td><button type="button" class="button sp-stage-remove">✕</button></td>';
-				bindRemove(tr.querySelector('.sp-stage-remove'));
 				return tr;
 			}
 
-			tbody.querySelectorAll('.sp-stage-remove').forEach(bindRemove);
-			addBtn.addEventListener('click', function () { tbody.appendChild(makeRow()); });
+			// Event delegation: remove button
+			document.addEventListener('click', function (e) {
+				var btn = e.target.closest('.sp-stage-remove');
+				if (!btn) return;
+				var tbody = btn.closest('tbody');
+				btn.closest('tr').remove();
+				if (tbody) reindex(tbody);
+			});
+
+			// Per-course add buttons
+			document.querySelectorAll('.sp-add-stage-course').forEach(function (addBtn) {
+				addBtn.addEventListener('click', function () {
+					var tbody = addBtn.closest('.sp-course-extra-body').querySelector('tbody.sp-stages-tbody');
+					if (tbody) tbody.appendChild(makeRow(tbody));
+				});
+			});
+
+			// Global fallback add button
+			var globalAdd   = document.getElementById('sp-add-stage');
+			var globalTbody = document.getElementById('sp-stages-tbody');
+			if (globalAdd && globalTbody) {
+				globalAdd.addEventListener('click', function () {
+					globalTbody.appendChild(makeRow(globalTbody));
+				});
+			}
 		})();
 
 	})();

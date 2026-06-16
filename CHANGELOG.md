@@ -1,5 +1,24 @@
 # تاریخچه تغییرات افزونه اسپات پلیر
 
+## [25.10] - 1404-03-26
+
+### بهبود استایل فرم + تنظیم قیمت per-course
+
+**استایل فرم درخواست دسترسی اضافه:**
+- `max-width: 640px` با `direction: rtl` برای فرم
+- هر سفارش در یک card با border، border-radius و box-shadow قرار گرفت
+- باکس نمایش قیمت با بک‌گراند سبز (`#f0fdf4`) و مبلغ به رنگ `#15803d`
+- دکمه submit با استایل indigo (`#4f46e5`)، hover و حالت disabled
+- جدول history با border-collapse کامل و سربرگ با بک‌گراند `#f9fafb`
+
+**قیمت‌گذاری per-course در تنظیمات:**
+- تابع `spot_extra_resolve_course_config(?WC_Order)` اضافه شد: اول `extra_course_stages[course_id]` را چک می‌کند، در صورت نبود از `extra_stages` global استفاده می‌کند
+- `spot_extra_calc_price_from_count()` پارامتر `?array $config` گرفت تا option read تکراری نداشته باشد
+- UI تب «دسترسی اضافه» بازطراحی شد: به ازای هر دوره‌ای که در `spot_courses` تعریف شده یک `<details>` accordion جداگانه، به علاوه یک بخش fallback «پیش‌فرض» در انتها
+- field names per-course: `spot_extra_course_stages[{cid}][stages][{i}][type/value]`
+- JS با event delegation به‌روز شد: add/remove/reindex برای هر tbody (با `data-cid`) و global fallback به‌صورت مستقل عمل می‌کنند
+- PHP handler ذخیره `extra_course_stages` را parse و sanitize می‌کند
+
 ## [25.9] - 1404-03-26
 
 ### بهبود پرفورمنس
