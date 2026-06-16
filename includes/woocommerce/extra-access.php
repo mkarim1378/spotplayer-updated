@@ -69,7 +69,7 @@ function spot_extra_render_page(): void {
 	foreach ($licensed_orders as $ord) {
 		$oid        = $ord->get_id();
 		$products   = spot_woo_order_items($ord, true);
-		$names      = array_map(fn($p) => $p->get_name(), $products);
+		$names      = array_map(function ($p) { return $p->get_name(); }, $products);
 		$base_label = implode('، ', $names) ?: 'سفارش #' . $oid;
 
 		$has_pending = spot_extra_has_pending($oid);
