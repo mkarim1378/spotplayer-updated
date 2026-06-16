@@ -230,7 +230,7 @@ function spot_admin_page() {
 
 	<div class="sp-page-header">
 		<h1>تنظیمات اسپات پلیر <a href="https://spotplayer.ir/help/api/wordpress" target="_blank" style="font-size:13px;font-weight:normal;vertical-align:middle;margin-right:8px">(راهنما ↗)</a></h1>
-		<button type="submit" form="sp-main-form" class="button button-primary" style="height:34px;line-height:32px">ذخیره تنظیمات</button>
+		<button type="submit" id="sp-global-save-btn" form="sp-main-form" class="button button-primary" style="height:34px;line-height:32px">ذخیره تنظیمات</button>
 	</div>
 
 	<nav class="sp-tabs-nav">
@@ -754,9 +754,16 @@ function spot_admin_page() {
 		var btns   = document.querySelectorAll('.sp-tab-btn');
 		var panels = document.querySelectorAll('.sp-tab-panel');
 
+		var globalSaveBtn = document.getElementById('sp-global-save-btn');
+		// Tabs that have their own save button — top button should be hidden there
+		var tabsWithOwnSave = ['courses', 'bulk', 'extra'];
+
 		function activate(id) {
 			btns.forEach(function (b) { b.classList.toggle('sp-tab-active', b.dataset.tab === id); });
 			panels.forEach(function (p) { p.classList.toggle('sp-tab-active', p.id === 'sp-tab-' + id); });
+			if (globalSaveBtn) {
+				globalSaveBtn.style.display = tabsWithOwnSave.indexOf(id) !== -1 ? 'none' : '';
+			}
 			try { localStorage.setItem('sp_active_tab', id); } catch (e) {}
 		}
 

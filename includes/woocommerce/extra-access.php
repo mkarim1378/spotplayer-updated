@@ -94,27 +94,21 @@ function spot_extra_render_page(): void {
 		],
 	]);
 
-	// Batch-load all extra request orders for this user in ONE query
+	// Batch-load all paid extra request orders for this user in ONE query
 	$all_extra = wc_get_orders([
 		'customer'   => $uid,
 		'limit'      => -1,
-		'status'     => ['processing', 'completed', 'pending', 'on-hold'],
+		'status'     => ['processing', 'completed'],
 		'orderby'    => 'date',
 		'order'      => 'DESC',
 		'meta_query' => [['key' => '_spot_extra_request', 'value' => '1']],
 	]);
 	$paid_counts   = [];   // origin_id => count of paid requests
-	$pending_set   = [];   // origin_id => true if a pending request exists
 	$past_requests = [];   // paid extra orders for history table
 	foreach ($all_extra as $ex) {
-		$oid    = (int) $ex->get_meta('_spot_extra_origin_order');
-		$status = $ex->get_status();
-		if (in_array($status, ['processing', 'completed'], true)) {
-			$paid_counts[$oid] = ($paid_counts[$oid] ?? 0) + 1;
-			$past_requests[]   = $ex;
-		} elseif (in_array($status, ['pending', 'on-hold'], true)) {
-			$pending_set[$oid] = true;
-		}
+		$oid = (int) $ex->get_meta('_spot_extra_origin_order');
+		$paid_counts[$oid] = ($paid_counts[$oid] ?? 0) + 1;
+		$past_requests[]   = $ex;
 	}
 
 	// Build origin_map reusing already-loaded licensed orders;
@@ -145,13 +139,10 @@ function spot_extra_render_page(): void {
 		$names      = array_map(function ($p) { return $p->get_name(); }, $products);
 		$base_label = implode('، ', $names) ?: 'سفارش #' . $oid;
 
-		$has_pending = isset($pending_set[$oid]);
-		$calc        = spot_extra_calc_price_from_count($oid, $paid_counts[$oid] ?? 0, $ord, spot_extra_resolve_course_config($ord));
-		$is_blocked  = $calc['blocked'] || $has_pending;
+		$calc       = spot_extra_calc_price_from_count($oid, $paid_counts[$oid] ?? 0, $ord, spot_extra_resolve_course_config($ord));
+		$is_blocked = $calc['blocked'];
 
-		if ($has_pending) {
-			$suffix = ' (در انتظار پرداخت)';
-		} elseif ($calc['blocked']) {
+		if ($calc['blocked']) {
 			$suffix = ' (سقف درخواست)';
 		} else {
 			$suffix = '';
@@ -326,10 +317,6 @@ function spot_extra_handle_submit(): void {
 	$spot_data = $origin_order->get_meta('_spotplayer_data');
 	if (empty($spot_data['_id'])) {
 		$set_error('این سفارش دارای لایسنس اسپات نیست.');
-	}
-
-	if (spot_extra_has_pending($origin_id)) {
-		$set_error('یک درخواست پرداخت‌نشده برای این لایسنس در انتظار است. لطفاً ابتدا آن را تکمیل یا لغو کنید.');
 	}
 
 	$calc = spot_extra_calc_price($origin_id);

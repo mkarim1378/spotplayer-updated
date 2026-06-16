@@ -23,7 +23,7 @@ function spot_extra_register_admin_page(): void {
  */
 function spot_extra_fetch_requests(string $search, string $date_from, string $date_to, int $paged = 1, int $per_page = 20): array {
 	$base_args = [
-		'status'     => ['processing', 'completed'],
+		'status'     => ['processing', 'completed', 'pending', 'on-hold', 'cancelled', 'failed'],
 		'orderby'    => 'date',
 		'order'      => 'DESC',
 		'meta_query' => [['key' => '_spot_extra_request', 'value' => '1']],
@@ -92,6 +92,7 @@ function spot_extra_fetch_requests(string $search, string $date_from, string $da
 			'courses'      => implode('، ', $course_names) ?: '—',
 			'total'        => $order->get_total(),
 			'date'         => $dt ? $dt->date('Y-m-d') : '',
+			'status'       => $order->get_status(),
 			'msg1_status'  => (string) $order->get_meta('_spot_sms_msg1_status'),
 			'msg2_status'  => (string) $order->get_meta('_spot_sms_msg2_status'),
 		];
@@ -104,6 +105,22 @@ function spot_extra_fetch_requests(string $search, string $date_from, string $da
 	}
 
 	return ['rows' => $rows, 'total' => $db_total ?? 0];
+}
+
+// ── Order status badge helper ─────────────────────────────────────────────────
+
+function spot_extra_order_badge(string $status): string {
+	$map = [
+		'completed'  => ['تکمیل‌شده',       'background:#dcfce7;color:#15803d'],
+		'processing' => ['در حال پردازش',    'background:#dbeafe;color:#1d4ed8'],
+		'pending'    => ['در انتظار پرداخت', 'background:#fef9c3;color:#854d0e'],
+		'on-hold'    => ['معلق',              'background:#fef3c7;color:#92400e'],
+		'cancelled'  => ['لغو شده',          'background:#f3f4f6;color:#6b7280'],
+		'failed'     => ['ناموفق',           'background:#fce8e8;color:#b91c1c'],
+		'refunded'   => ['بازگشت وجه',       'background:#f5f3ff;color:#6d28d9'],
+	];
+	[$label, $style] = $map[$status] ?? [$status, 'background:#f0f0f0;color:#646970'];
+	return '<span style="display:inline-block;padding:2px 7px;border-radius:3px;font-size:11px;font-weight:600;' . esc_attr($style) . '">' . esc_html($label) . '</span>';
 }
 
 // ── SMS status badge helper ──────────────────────────────────────────────────
@@ -175,18 +192,19 @@ function spot_extra_admin_render(): void {
 	<table class="wp-list-table widefat fixed striped">
 		<thead><tr>
 			<th style="width:8%">شماره</th>
-			<th style="width:15%">نام مشتری</th>
-			<th style="width:12%">موبایل</th>
-			<th style="width:18%">دوره‌ها</th>
-			<th style="width:6%">مرحله</th>
-			<th style="width:9%">مبلغ</th>
-			<th style="width:9%">تاریخ</th>
-			<th style="width:11%">پیامک</th>
-			<th style="width:12%">عملیات</th>
+			<th style="width:13%">نام مشتری</th>
+			<th style="width:11%">موبایل</th>
+			<th style="width:16%">دوره‌ها</th>
+			<th style="width:5%">مرحله</th>
+			<th style="width:8%">مبلغ</th>
+			<th style="width:11%">وضعیت</th>
+			<th style="width:8%">تاریخ</th>
+			<th style="width:10%">پیامک</th>
+			<th style="width:10%">عملیات</th>
 		</tr></thead>
 		<tbody>
 		<?php if (empty($page_rows)): ?>
-			<tr><td colspan="9" style="text-align:center;color:#646970;padding:24px">موردی یافت نشد.</td></tr>
+			<tr><td colspan="10" style="text-align:center;color:#646970;padding:24px">موردی یافت نشد.</td></tr>
 		<?php else: foreach ($page_rows as $r): ?>
 			<tr>
 				<td>
@@ -200,13 +218,14 @@ function spot_extra_admin_render(): void {
 				<td><?= esc_html($r['courses']) ?></td>
 				<td style="text-align:center"><?= esc_html($r['stage']) ?></td>
 				<td><?= wc_price($r['total']) ?></td>
+				<td><?= spot_extra_order_badge($r['status']) ?></td>
 				<td><?= esc_html($r['date']) ?></td>
 				<td>
 					<div><?= spot_extra_sms_badge($r['msg1_status']) ?></div>
 					<div style="margin-top:2px"><?= spot_extra_sms_badge($r['msg2_status']) ?></div>
 				</td>
 				<td style="white-space:nowrap">
-					<?php if ($sms_enabled): ?>
+					<?php if ($sms_enabled && in_array($r['status'], ['processing', 'completed'], true)): ?>
 					<button type="button" class="button button-small spot-extra-sms-btn"
 					        data-order="<?= esc_attr($r['order_id']) ?>"
 					        data-nonce="<?= esc_attr(wp_create_nonce('spot_extra_sms_' . $r['order_id'])) ?>">
