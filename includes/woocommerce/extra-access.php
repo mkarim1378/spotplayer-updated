@@ -216,6 +216,85 @@ function spot_extra_render_page(): void {
 }
 add_action('woocommerce_account_license-request_endpoint', 'spot_extra_render_page');
 
+// ── Form submit handler ──────────────────────────────────────────────────────
+
+function spot_extra_handle_submit(): void {
+	if (!isset($_POST['spot_extra_submit'])) return;
+	if (!is_user_logged_in()) {
+		wp_safe_redirect(wc_get_account_endpoint_url('dashboard'));
+		exit;
+	}
+
+	$uid      = get_current_user_id();
+	$page_url = wc_get_account_endpoint_url('license-request');
+
+	$set_error = static function (string $msg) use ($uid, $page_url): void {
+		set_transient('spot_extra_error_' . $uid, $msg, 60);
+		wp_safe_redirect($page_url);
+		exit;
+	};
+
+	if (!isset($_POST['spot_extra_nonce']) || !wp_verify_nonce(sanitize_text_field(wp_unslash($_POST['spot_extra_nonce'])), 'spot_extra_submit')) {
+		$set_error('خطای امنیتی. لطفاً دوباره تلاش کنید.');
+	}
+
+	$origin_id = absint($_POST['spot_extra_origin_order'] ?? 0);
+	$phone     = spot_sms_normalize_phone(sanitize_text_field(wp_unslash($_POST['spot_extra_phone'] ?? '')));
+
+	if (!$origin_id) {
+		$set_error('لطفاً یک سفارش انتخاب کنید.');
+	}
+
+	$origin_order = wc_get_order($origin_id);
+	if (!($origin_order instanceof WC_Order) || (int) $origin_order->get_customer_id() !== $uid) {
+		$set_error('سفارش مورد نظر یافت نشد.');
+	}
+
+	$spot_data = $origin_order->get_meta('_spotplayer_data');
+	if (empty($spot_data['_id'])) {
+		$set_error('این سفارش دارای لایسنس اسپات نیست.');
+	}
+
+	if (spot_extra_has_pending($origin_id)) {
+		$set_error('یک درخواست پرداخت‌نشده برای این لایسنس در انتظار است. لطفاً ابتدا آن را تکمیل یا لغو کنید.');
+	}
+
+	$calc = spot_extra_calc_price($origin_id);
+	if ($calc['blocked']) {
+		$set_error('به سقف درخواست دسترسی اضافه رسیده‌اید.');
+	}
+
+	// Copy billing address from the original order
+	$customer = new WC_Customer($uid);
+	$new_order = wc_create_order(['customer_id' => $uid]);
+
+	$new_order->set_billing_first_name($customer->get_billing_first_name());
+	$new_order->set_billing_last_name($customer->get_billing_last_name());
+	$new_order->set_billing_email($customer->get_billing_email());
+	$new_order->set_billing_phone($phone ?: $customer->get_billing_phone());
+	$new_order->set_billing_address_1($customer->get_billing_address_1());
+	$new_order->set_billing_city($customer->get_billing_city());
+	$new_order->set_billing_country($customer->get_billing_country());
+
+	$fee = new WC_Order_Item_Fee();
+	$fee->set_name('درخواست دسترسی اضافه — لایسنس #' . $origin_id);
+	$fee->set_amount($calc['price']);
+	$fee->set_total($calc['price']);
+	$fee->set_tax_status('none');
+	$new_order->add_item($fee);
+
+	$new_order->update_meta_data('_spot_extra_request',      '1');
+	$new_order->update_meta_data('_spot_extra_origin_order', (string) $origin_id);
+	$new_order->update_meta_data('_spot_extra_stage',        (string) $calc['stage']);
+
+	$new_order->calculate_totals();
+	$new_order->save();
+
+	wp_safe_redirect($new_order->get_checkout_payment_url());
+	exit;
+}
+add_action('template_redirect', 'spot_extra_handle_submit');
+
 // ── Helper: count paid extra requests for a given origin order ───────────────
 
 function spot_extra_count_paid_requests(int $origin_order_id): int {
