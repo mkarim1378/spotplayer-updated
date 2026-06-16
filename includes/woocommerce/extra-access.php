@@ -25,7 +25,194 @@ add_filter('woocommerce_account_menu_items', 'spot_extra_menu_item', 51);
 // ── Endpoint content ─────────────────────────────────────────────────────────
 
 function spot_extra_render_page(): void {
-	// Phase 4: full implementation
+	if (!is_user_logged_in()) {
+		wp_safe_redirect(wc_get_account_endpoint_url('dashboard'));
+		exit;
+	}
+
+	$uid      = get_current_user_id();
+	$customer = new WC_Customer($uid);
+
+	// Licensed orders for this customer (not extra-request orders themselves)
+	$licensed_orders = wc_get_orders([
+		'customer'   => $uid,
+		'limit'      => -1,
+		'status'     => ['processing', 'completed'],
+		'orderby'    => 'date',
+		'order'      => 'DESC',
+		'meta_query' => [
+			'relation' => 'AND',
+			['key' => '_spotplayer_data',    'compare' => 'EXISTS'],
+			['key' => '_spot_extra_request', 'compare' => 'NOT EXISTS'],
+		],
+	]);
+
+	// Previous paid extra requests by this user
+	$past_requests = wc_get_orders([
+		'customer'   => $uid,
+		'limit'      => -1,
+		'status'     => ['processing', 'completed'],
+		'orderby'    => 'date',
+		'order'      => 'DESC',
+		'meta_query' => [['key' => '_spot_extra_request', 'value' => '1']],
+	]);
+
+	$error = get_transient('spot_extra_error_' . $uid);
+	if ($error) delete_transient('spot_extra_error_' . $uid);
+
+	$full_name     = trim($customer->get_billing_first_name() . ' ' . $customer->get_billing_last_name());
+	$billing_phone = $customer->get_billing_phone();
+
+	// Build dropdown options and JS price map
+	$order_options = [];
+	$price_map     = [];
+	foreach ($licensed_orders as $ord) {
+		$oid        = $ord->get_id();
+		$products   = spot_woo_order_items($ord, true);
+		$names      = array_map(fn($p) => $p->get_name(), $products);
+		$base_label = implode('، ', $names) ?: 'سفارش #' . $oid;
+
+		$has_pending = spot_extra_has_pending($oid);
+		$calc        = spot_extra_calc_price($oid);
+		$is_blocked  = $calc['blocked'] || $has_pending;
+
+		if ($has_pending) {
+			$suffix = ' (در انتظار پرداخت)';
+		} elseif ($calc['blocked']) {
+			$suffix = ' (سقف درخواست)';
+		} else {
+			$suffix = '';
+		}
+
+		$order_options[] = [
+			'id'      => $oid,
+			'label'   => $base_label . ' — #' . $oid . $suffix,
+			'blocked' => $is_blocked,
+		];
+		$price_map[$oid] = [
+			'price'   => $calc['price'],
+			'stage'   => $calc['stage'],
+			'blocked' => $is_blocked,
+		];
+	}
+
+	$has_options = !empty($order_options);
+	?>
+	<div class="spot-extra-wrap">
+
+		<?php if ($error): ?>
+			<ul class="woocommerce-error"><li><?= esc_html($error) ?></li></ul>
+		<?php endif ?>
+
+		<form method="post" class="spot-extra-form">
+			<?php wp_nonce_field('spot_extra_submit', 'spot_extra_nonce') ?>
+			<input type="hidden" name="spot_extra_submit" value="1">
+
+			<p class="form-row">
+				<label>نام مشتری</label>
+				<strong><?= esc_html($full_name ?: '—') ?></strong>
+			</p>
+
+			<p class="form-row">
+				<label for="spot_extra_phone">شماره موبایل</label>
+				<input type="tel" id="spot_extra_phone" name="spot_extra_phone"
+				       value="<?= esc_attr($billing_phone) ?>"
+				       placeholder="09XXXXXXXXX" maxlength="11" class="input-text">
+			</p>
+
+			<p class="form-row">
+				<label for="spot_extra_origin_order">لایسنس مورد نظر</label>
+				<?php if (!$has_options): ?>
+					<span>هیچ سفارش لایسنس‌داری یافت نشد.</span>
+				<?php else: ?>
+					<select id="spot_extra_origin_order" name="spot_extra_origin_order" class="input-text">
+						<option value="">-- انتخاب کنید --</option>
+						<?php foreach ($order_options as $opt): ?>
+							<option value="<?= esc_attr($opt['id']) ?>"
+							        <?php disabled($opt['blocked']) ?>>
+								<?= esc_html($opt['label']) ?>
+							</option>
+						<?php endforeach ?>
+					</select>
+				<?php endif ?>
+			</p>
+
+			<p class="form-row" id="spot-extra-price-row" style="display:none">
+				<label>مبلغ پرداختی</label>
+				<strong id="spot-extra-price"></strong>
+				<em id="spot-extra-stage" style="margin-right:6px;color:#888"></em>
+			</p>
+
+			<?php if ($has_options): ?>
+				<p class="form-row">
+					<button type="submit" id="spot-extra-submit-btn" class="button" disabled>
+						پرداخت و ثبت درخواست
+					</button>
+				</p>
+			<?php endif ?>
+		</form>
+
+		<?php if (!empty($past_requests)): ?>
+			<h3 style="margin-top:2rem">درخواست‌های قبلی</h3>
+			<table class="shop_table spot-extra-history">
+				<thead>
+					<tr>
+						<th>شماره</th>
+						<th>لایسنس</th>
+						<th>مرحله</th>
+						<th>مبلغ</th>
+						<th>تاریخ</th>
+						<th>وضعیت</th>
+					</tr>
+				</thead>
+				<tbody>
+					<?php foreach ($past_requests as $req):
+						$origin_id    = (int) $req->get_meta('_spot_extra_origin_order');
+						$stage        = (int) $req->get_meta('_spot_extra_stage');
+						$origin_order = $origin_id ? wc_get_order($origin_id) : null;
+						$c_names      = [];
+						if ($origin_order instanceof WC_Order) {
+							foreach (spot_woo_order_items($origin_order, true) as $p)
+								$c_names[] = $p->get_name();
+						}
+					?>
+					<tr>
+						<td>#<?= $req->get_id() ?></td>
+						<td><?= esc_html(implode('، ', $c_names) ?: '#' . $origin_id) ?></td>
+						<td><?= esc_html($stage) ?></td>
+						<td><?= wc_price($req->get_total()) ?></td>
+						<td><?= esc_html(wc_format_datetime($req->get_date_created())) ?></td>
+						<td><?= esc_html(wc_get_order_status_name($req->get_status())) ?></td>
+					</tr>
+					<?php endforeach ?>
+				</tbody>
+			</table>
+		<?php endif ?>
+
+	</div>
+	<script>
+	(function () {
+		var map     = <?= wp_json_encode($price_map) ?>;
+		var sel     = document.getElementById('spot_extra_origin_order');
+		var priceRow = document.getElementById('spot-extra-price-row');
+		var priceEl  = document.getElementById('spot-extra-price');
+		var stageEl  = document.getElementById('spot-extra-stage');
+		var btn      = document.getElementById('spot-extra-submit-btn');
+		if (!sel) return;
+		sel.addEventListener('change', function () {
+			var oid = this.value;
+			var d   = oid ? map[oid] : null;
+			var ok  = d && !d.blocked;
+			if (priceRow) priceRow.style.display = ok ? '' : 'none';
+			if (btn)      btn.disabled = !ok;
+			if (ok) {
+				priceEl.textContent = Number(d.price).toLocaleString('fa-IR') + ' تومان';
+				stageEl.textContent = '(مرحله ' + d.stage + ')';
+			}
+		});
+	})();
+	</script>
+	<?php
 }
 add_action('woocommerce_account_license-request_endpoint', 'spot_extra_render_page');
 
