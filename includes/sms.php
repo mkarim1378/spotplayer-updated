@@ -684,3 +684,164 @@ function spot_ajax_test_sms(): void {
 	if ($result['ok']) wp_send_json_success('پیامک آزمایشی با موفقیت ارسال شد.');
 	else               wp_send_json_error($result['error'] ?: 'ارسال ناموفق بود.');
 }
+
+// ── Extra access: message builder ────────────────────────────────────────────
+
+function spot_sms_build_extra_message(string $template, WC_Order $request_order, WC_Order $origin_order): string {
+	$vars = [
+		'{customer_name}' => trim($request_order->get_billing_first_name() . ' ' . $request_order->get_billing_last_name()),
+		'{order_id}'      => (string) $request_order->get_order_number(),
+		'{course_names}'  => spot_sms_course_names_woo($origin_order),
+		'{site_name}'     => get_bloginfo('name'),
+		'{site_url}'      => get_bloginfo('url'),
+	];
+	return str_replace(array_keys($vars), array_values($vars), $template);
+}
+
+// ── Extra access: trigger (called from admin dashboard) ───────────────────────
+
+function spot_sms_trigger_extra(WC_Order $request_order): void {
+	if (!spot_sms_is_enabled()) return;
+
+	$phone = spot_sms_normalize_phone($request_order->get_billing_phone());
+	if (!$phone) {
+		$request_order->add_order_note('⚠️ شماره تلفن در سفارش یافت نشد — پیامک ارسال نشد.');
+		return;
+	}
+
+	$origin_id    = (int) $request_order->get_meta('_spot_extra_origin_order');
+	$origin_order = $origin_id ? wc_get_order($origin_id) : null;
+	if (!($origin_order instanceof WC_Order)) {
+		$request_order->add_order_note('⚠️ سفارش مبدأ یافت نشد — پیامک ارسال نشد.');
+		return;
+	}
+
+	$key = (string) (((array) $origin_order->get_meta('_spotplayer_data'))['key'] ?? '');
+	if (!$key) {
+		$request_order->add_order_note('⚠️ کد لایسنس در سفارش مبدأ #' . $origin_id . ' یافت نشد — پیامک ارسال نشد.');
+		return;
+	}
+
+	spot_sms_init_order_meta($request_order, $phone);
+
+	if (function_exists('as_schedule_single_action')) {
+		as_schedule_single_action(time() + 5, 'spot_sms_extra_msg1', [
+			'order_id' => $request_order->get_id(), 'attempt' => 1,
+		]);
+		return;
+	}
+
+	// Synchronous fallback (no AS)
+	$sp   = get_option('spotplayer', []);
+	$text = spot_sms_build_extra_message((string) ($sp['sms_template_extra'] ?? ''), $request_order, $origin_order);
+	$r1   = spot_sms_send_raw($phone, $text);
+	if ($r1['ok']) {
+		$r2 = spot_sms_send_raw($phone, $key);
+		if (!$r2['ok'])
+			$request_order->add_order_note('⚠️ پیامک اول ارسال شد اما کد لایسنس ارسال نشد: ' . $r2['error']);
+	} else {
+		$request_order->add_order_note('⚠️ ارسال پیامک ناموفق بود: ' . $r1['error'] . ' — برای retry خودکار، Action Scheduler لازم است.');
+	}
+}
+
+// ── Extra access: AS handlers ─────────────────────────────────────────────────
+
+add_action('spot_sms_extra_msg1', 'spot_sms_handle_extra_msg1', 10, 2);
+function spot_sms_handle_extra_msg1(int $order_id, int $attempt): void {
+	$request_order = wc_get_order($order_id);
+	if (!($request_order instanceof WC_Order)) return;
+
+	$origin_id    = (int) $request_order->get_meta('_spot_extra_origin_order');
+	$origin_order = $origin_id ? wc_get_order($origin_id) : null;
+	if (!($origin_order instanceof WC_Order)) {
+		$request_order->add_order_note('⚠️ سفارش مبدأ یافت نشد — پیامک ارسال نشد.');
+		return;
+	}
+
+	$phone = (string) $request_order->get_meta('_spot_sms_phone');
+	$sp    = get_option('spotplayer', []);
+	$text  = spot_sms_build_extra_message((string) ($sp['sms_template_extra'] ?? ''), $request_order, $origin_order);
+
+	$request_order->update_meta_data('_spot_sms_msg1_attempts', $attempt);
+	$request_order->save_meta_data();
+
+	$result = spot_sms_send_raw($phone, $text);
+
+	if ($result['ok']) {
+		$request_order->update_meta_data('_spot_sms_msg1_status',  'sent');
+		$request_order->update_meta_data('_spot_sms_msg1_sent_at', time());
+		$request_order->update_meta_data('_spot_sms_msg1_id',      $result['msg_id']);
+		$request_order->save_meta_data();
+		$request_order->add_order_note('📲 پیامک توضیحات دسترسی اضافه به ' . $phone . ' ارسال شد.');
+
+		if (function_exists('as_schedule_single_action'))
+			as_schedule_single_action(time(), 'spot_sms_extra_msg2', ['order_id' => $order_id, 'attempt' => 1]);
+		return;
+	}
+
+	if ($attempt >= SPOT_SMS_MAX_ATTEMPTS) {
+		$request_order->update_meta_data('_spot_sms_msg1_status', 'abandoned');
+		$request_order->save_meta_data();
+		$request_order->add_order_note('🛑 ارسال پیامک دسترسی اضافه پس از ' . $attempt . ' بار تلاش متوقف شد.');
+		return;
+	}
+
+	if ($attempt === 5)
+		$request_order->add_order_note('⚠️ ارسال پیامک دسترسی اضافه پس از ۵ بار تلاش ناموفق بود. هر ۵ دقیقه مجدداً تلاش می‌شود.');
+
+	if (function_exists('as_schedule_single_action'))
+		as_schedule_single_action(time() + spot_sms_retry_delay($attempt), 'spot_sms_extra_msg1', [
+			'order_id' => $order_id, 'attempt' => $attempt + 1,
+		]);
+}
+
+add_action('spot_sms_extra_msg2', 'spot_sms_handle_extra_msg2', 10, 2);
+function spot_sms_handle_extra_msg2(int $order_id, int $attempt): void {
+	$request_order = wc_get_order($order_id);
+	if (!($request_order instanceof WC_Order)) return;
+
+	$origin_id    = (int) $request_order->get_meta('_spot_extra_origin_order');
+	$origin_order = $origin_id ? wc_get_order($origin_id) : null;
+	$key          = $origin_order instanceof WC_Order
+		? (string) (((array) $origin_order->get_meta('_spotplayer_data'))['key'] ?? '')
+		: '';
+
+	$phone = (string) $request_order->get_meta('_spot_sms_phone');
+
+	$request_order->update_meta_data('_spot_sms_msg2_status',   'pending');
+	$request_order->update_meta_data('_spot_sms_msg2_attempts', $attempt);
+	$request_order->save_meta_data();
+
+	if (!$key) {
+		$request_order->update_meta_data('_spot_sms_msg2_status', 'failed');
+		$request_order->save_meta_data();
+		$request_order->add_order_note('⚠️ کد لایسنس در سفارش مبدأ #' . $origin_id . ' یافت نشد — پیامک دوم ارسال نشد.');
+		return;
+	}
+
+	$result = spot_sms_send_raw($phone, $key);
+
+	if ($result['ok']) {
+		$request_order->update_meta_data('_spot_sms_msg2_status',  'sent');
+		$request_order->update_meta_data('_spot_sms_msg2_sent_at', time());
+		$request_order->update_meta_data('_spot_sms_msg2_id',      $result['msg_id']);
+		$request_order->save_meta_data();
+		$request_order->add_order_note('📲 کد لایسنس به ' . $phone . ' ارسال شد.');
+		return;
+	}
+
+	if ($attempt >= SPOT_SMS_MAX_ATTEMPTS) {
+		$request_order->update_meta_data('_spot_sms_msg2_status', 'abandoned');
+		$request_order->save_meta_data();
+		$request_order->add_order_note('🛑 ارسال کد لایسنس پس از ' . $attempt . ' بار تلاش متوقف شد.');
+		return;
+	}
+
+	if ($attempt === 5)
+		$request_order->add_order_note('⚠️ ارسال کد لایسنس پس از ۵ بار تلاش ناموفق بود. هر ۵ دقیقه مجدداً تلاش می‌شود.');
+
+	if (function_exists('as_schedule_single_action'))
+		as_schedule_single_action(time() + spot_sms_retry_delay($attempt), 'spot_sms_extra_msg2', [
+			'order_id' => $order_id, 'attempt' => $attempt + 1,
+		]);
+}
