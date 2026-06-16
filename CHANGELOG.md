@@ -1,5 +1,12 @@
 # تاریخچه تغییرات افزونه اسپات پلیر
 
+## [25.2] - 1404-03-26
+
+### فیچر جدید (فاز ۳ — اندپوینت و آیتم منوی دسترسی اضافه)
+- **`includes/woocommerce/extra-access.php`** (فایل جدید): ثبت اندپوینت `license-request` روی `EP_PAGES`، اضافه‌کردن آیتم «درخواست دسترسی اضافه» به منوی اکانت WooCommerce (بعد از «لایسنس‌های من» در صورت وجود).
+- **توابع کمکی** اضافه شد: `spot_extra_count_paid_requests`, `spot_extra_has_pending`, `spot_extra_origin_total`, `spot_extra_calc_price` — محاسبه قیمت و مرحله بر اساس تنظیمات stages.
+- **activation hook** به ثبت هر دو اندپوینت `licenses` و `license-request` قبل از `flush_rewrite_rules` آپدیت شد.
+
 ## [25.1] - 1404-03-26
 
 ### فیچر جدید (فاز ۲ — تنظیمات پیامک دسترسی اضافه و گزارش روزانه)
