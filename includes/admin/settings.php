@@ -118,6 +118,29 @@ function spot_admin_page() {
 		$force_tab = 'bulk';
 	}
 
+	// ── پردازش فرم دسترسی اضافه ─────────────────────────────────────────────
+	$extra_notice = '';
+	if (isset($_POST['spot_save_extra']) && check_admin_referer('spot_save_extra', 'spot_extra_nonce')) {
+		$stages = [];
+		foreach ((array)($_POST['spot_extra_stages'] ?? []) as $row) {
+			$type  = sanitize_key($row['type'] ?? '');
+			$value = floatval($row['value'] ?? 0);
+			if (!in_array($type, ['fixed', 'percent'], true) || $value <= 0) continue;
+			$stages[] = ['type' => $type, 'value' => $value];
+		}
+		$end_mode = sanitize_key($_POST['spot_extra_end_mode'] ?? 'max');
+		if (!in_array($end_mode, ['max', 'repeat_last'], true)) $end_mode = 'max';
+
+		$sp_opt = get_option('spotplayer', []);
+		$sp_opt['extra_stages']   = $stages;
+		$sp_opt['extra_end_mode'] = $end_mode;
+		update_option('spotplayer', $sp_opt);
+		$sp = $sp_opt;
+
+		$extra_notice = '<div class="notice notice-success"><p>✅ تنظیمات دسترسی اضافه ذخیره شد.</p></div>';
+		$force_tab = 'extra';
+	}
+
 	$saved_courses = get_option('spot_courses', []);
 	?>
 
@@ -152,6 +175,15 @@ function spot_admin_page() {
 	.sp-inst-remove { color:#c00; border-color:#c00; padding:1px 6px; min-height:0; height:22px; line-height:20px; font-size:11px; }
 	.sp-sms-counter { font-size:12px; color:#646970; margin-top:4px; }
 	.sp-sms-template { direction:rtl !important; font-family:inherit !important; }
+	/* ── Stages table (extra access) ── */
+	.sp-stages-table { width:100%; border-collapse:collapse; margin-bottom:12px; max-width:560px; }
+	.sp-stages-table th { text-align:right; padding:6px 8px; background:#f6f7f7; border-bottom:1px solid #dcdcde; font-size:12px; font-weight:600; }
+	.sp-stages-table td { padding:5px 8px; border-bottom:1px solid #f0f0f1; vertical-align:middle; }
+	.sp-stages-table td select, .sp-stages-table td input[type=number] { width:100%; margin:0; }
+	.sp-stage-remove { color:#c00; border-color:#c00; padding:2px 8px; min-height:0; height:26px; line-height:24px; }
+	.sp-end-mode-opt { display:flex; align-items:flex-start; gap:10px; padding:10px 14px; border-radius:3px; background:#f9f9f9; border:1px solid #f0f0f1; margin-bottom:8px; cursor:pointer; }
+	.sp-end-mode-opt:last-child { margin-bottom:0; }
+	.sp-end-mode-opt input[type=radio] { margin-top:3px; flex-shrink:0; }
 	/* ── Tabs ── */
 	.sp-tabs-nav { display:flex; border-bottom:2px solid #c3c4c7; margin-bottom:24px; gap:0; }
 	.sp-tab-btn { padding:9px 20px; border:1px solid transparent; border-bottom:none; background:none; cursor:pointer; font-size:13px; border-radius:4px 4px 0 0; margin-bottom:-2px; color:#646970; font-family:inherit; }
@@ -179,6 +211,7 @@ function spot_admin_page() {
 		<button type="button" class="sp-tab-btn" data-tab="sms">📲 پیامک</button>
 		<button type="button" class="sp-tab-btn" data-tab="courses">📚 دوره‌ها</button>
 		<button type="button" class="sp-tab-btn" data-tab="bulk">📦 عملیات دسته‌ای</button>
+		<button type="button" class="sp-tab-btn" data-tab="extra">💳 دسترسی اضافه</button>
 	</nav>
 
 	<!-- ═══════════ فرم اصلی: تب‌های ۱ و ۲ ═══════════ -->
@@ -338,6 +371,31 @@ function spot_admin_page() {
 					متغیرها: <code>{customer_name}</code> <code>{course_names}</code> <code>{next_installment_number}</code> <code>{total_installments}</code> <code>{due_date}</code> <code>{order_id}</code>
 				</p>
 			</div>
+			<hr style="margin:20px 0 16px;border:none;border-top:1px solid #f0f0f1">
+			<p style="font-weight:600;font-size:13px;margin:0 0 12px;color:#1d2327">💳 پیامک دسترسی اضافه لایسنس</p>
+			<div class="sp-field">
+				<label>متن پیامک توضیحات دسترسی اضافه <span style="font-weight:normal;color:#646970">(مرحله ۱ — پس از تأیید ادمین)</span></label>
+				<textarea name="spotplayer[sms_template_extra]" class="sp-sms-template" style="height:100px"><?= esc_textarea(@$sp['sms_template_extra']) ?></textarea>
+				<p class="description" style="margin-top:6px">
+					متغیرها: <code>{customer_name}</code> <code>{course_names}</code> <code>{order_id}</code> <code>{site_name}</code><br>
+					<span class="sp-warn">⚠ پیامک دوم به‌صورت خودکار فقط کد لایسنس ارسال می‌شود.</span>
+				</p>
+			</div>
+
+			<hr style="margin:20px 0 16px;border:none;border-top:1px solid #f0f0f1">
+			<p style="font-weight:600;font-size:13px;margin:0 0 12px;color:#1d2327">📊 گزارش روزانه درخواست‌های دسترسی اضافه</p>
+			<div class="sp-field">
+				<label>شماره موبایل ادمین برای گزارش روزانه</label>
+				<input type="text" name="spotplayer[extra_admin_phone]" value="<?= esc_attr(@$sp['extra_admin_phone']) ?>" placeholder="09XXXXXXXXX" style="direction:ltr;max-width:200px">
+				<p class="description" style="margin-top:4px">اگر در ۲۴ ساعت گذشته درخواستی ثبت شده باشد، در ساعت تعیین‌شده یک پیامک خلاصه ارسال می‌شود. اگر درخواستی نبود، پیامکی ارسال نمی‌شود.</p>
+			</div>
+			<div class="sp-field">
+				<label>ساعت ارسال گزارش روزانه</label>
+				<input type="time" name="spotplayer[extra_report_time]" value="<?= esc_attr(@$sp['extra_report_time'] ?: '08:00') ?>" style="direction:ltr;max-width:120px">
+				<p class="description" style="margin-top:4px">بر اساس تایم‌زون سایت. برای دقت ساعت، Action Scheduler باید نصب باشد.</p>
+			</div>
+
+			<hr style="margin:20px 0 16px;border:none;border-top:1px solid #f0f0f1">
 			<div class="sp-field">
 				<label>ارسال پیامک آزمایشی</label>
 				<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
@@ -529,6 +587,72 @@ function spot_admin_page() {
 		</div>
 
 	</div><!-- /sp-tab-bulk -->
+
+	<!-- ═══════════ تب ۵: دسترسی اضافه ═══════════ -->
+	<div class="sp-tab-panel" id="sp-tab-extra">
+
+		<?= $extra_notice ?>
+
+		<div class="sp-card">
+			<h2>💳 هزینه دسترسی اضافه لایسنس</h2>
+			<p style="margin-top:0;color:#646970;font-size:13px">وقتی کاربری برای اولین بار درخواست دسترسی اضافه می‌دهد هزینه‌ی پله اول دریافت می‌شود؛ دفعه دوم پله دوم، و به همین ترتیب.</p>
+			<form method="post">
+				<?php wp_nonce_field('spot_save_extra', 'spot_extra_nonce') ?>
+				<input type="hidden" name="spot_save_extra" value="1">
+
+				<table class="sp-stages-table">
+					<thead><tr>
+						<th style="width:12%">پله</th>
+						<th style="width:40%">نوع</th>
+						<th style="width:33%">مقدار</th>
+						<th style="width:15%"></th>
+					</tr></thead>
+					<tbody id="sp-stages-tbody">
+					<?php
+					$saved_stages = $sp['extra_stages'] ?? [];
+					foreach ($saved_stages as $si => $stage) { ?>
+						<tr>
+							<td style="text-align:center;font-weight:600;color:#646970"><?= $si + 1 ?></td>
+							<td>
+								<select name="spot_extra_stages[<?= $si ?>][type]">
+									<option value="fixed"   <?= ($stage['type'] ?? '') === 'fixed'   ? 'selected' : '' ?>>مبلغ ثابت (تومان)</option>
+									<option value="percent" <?= ($stage['type'] ?? '') === 'percent' ? 'selected' : '' ?>>درصد از مجموع سفارش</option>
+								</select>
+							</td>
+							<td><input type="number" name="spot_extra_stages[<?= $si ?>][value]" value="<?= esc_attr($stage['value'] ?? '') ?>" min="0" step="any" placeholder="مثلاً 500000"></td>
+							<td><button type="button" class="button sp-stage-remove">✕</button></td>
+						</tr>
+					<?php } ?>
+					</tbody>
+				</table>
+				<button type="button" id="sp-add-stage" class="button">+ افزودن پله</button>
+
+				<hr style="margin:20px 0;border:none;border-top:1px solid #f0f0f1">
+
+				<p style="font-weight:600;margin:0 0 8px">رفتار بعد از آخرین پله</p>
+				<?php $end_mode = $sp['extra_end_mode'] ?? 'max'; ?>
+				<label class="sp-end-mode-opt">
+					<input type="radio" name="spot_extra_end_mode" value="max" <?= $end_mode === 'max' ? 'checked' : '' ?>>
+					<div>
+						<span style="font-weight:600;display:block;margin-bottom:2px">حداکثر N بار</span>
+						<span style="color:#646970;font-size:12px">بعد از پرداخت آخرین پله، ثبت درخواست جدید ممکن نخواهد بود. N برابر تعداد پله‌های تعریف‌شده است.</span>
+					</div>
+				</label>
+				<label class="sp-end-mode-opt">
+					<input type="radio" name="spot_extra_end_mode" value="repeat_last" <?= $end_mode === 'repeat_last' ? 'checked' : '' ?>>
+					<div>
+						<span style="font-weight:600;display:block;margin-bottom:2px">تکرار قیمت پله آخر</span>
+						<span style="color:#646970;font-size:12px">از پله آخر به بعد، همان مبلغ برای همه‌ی درخواست‌های بعدی اعمال می‌شود و محدودیتی در تعداد دفعات وجود ندارد.</span>
+					</div>
+				</label>
+
+				<p style="margin-top:20px">
+					<?php submit_button('ذخیره تنظیمات دسترسی اضافه', 'primary', 'spot_extra_submit', false) ?>
+				</p>
+			</form>
+		</div>
+
+	</div><!-- /sp-tab-extra -->
 
 	</div><!-- /sp-settings -->
 
@@ -758,6 +882,43 @@ function spot_admin_page() {
 			if (active > 0) timer = setInterval(poll, 5000);
 		})();
 		<?php } ?>
+
+		// ── جدول پله‌های دسترسی اضافه ──────────────────────────────────────
+		(function () {
+			var tbody  = document.getElementById('sp-stages-tbody');
+			var addBtn = document.getElementById('sp-add-stage');
+			if (!tbody || !addBtn) return;
+
+			function reindex() {
+				tbody.querySelectorAll('tr').forEach(function (tr, i) {
+					tr.querySelector('td:first-child').textContent = i + 1;
+					tr.querySelector('select').name = 'spot_extra_stages[' + i + '][type]';
+					tr.querySelector('input[type=number]').name = 'spot_extra_stages[' + i + '][value]';
+				});
+			}
+
+			function bindRemove(btn) {
+				btn.addEventListener('click', function () { btn.closest('tr').remove(); reindex(); });
+			}
+
+			function makeRow() {
+				var i  = tbody.querySelectorAll('tr').length;
+				var tr = document.createElement('tr');
+				tr.innerHTML =
+					'<td style="text-align:center;font-weight:600;color:#646970">' + (i + 1) + '</td>'
+					+ '<td><select name="spot_extra_stages[' + i + '][type]">'
+					+ '<option value="fixed">مبلغ ثابت (تومان)</option>'
+					+ '<option value="percent">درصد از مجموع سفارش</option>'
+					+ '</select></td>'
+					+ '<td><input type="number" name="spot_extra_stages[' + i + '][value]" min="0" step="any" placeholder="مثلاً 500000"></td>'
+					+ '<td><button type="button" class="button sp-stage-remove">✕</button></td>';
+				bindRemove(tr.querySelector('.sp-stage-remove'));
+				return tr;
+			}
+
+			tbody.querySelectorAll('.sp-stage-remove').forEach(bindRemove);
+			addBtn.addEventListener('click', function () { tbody.appendChild(makeRow()); });
+		})();
 
 	})();
 	</script>
