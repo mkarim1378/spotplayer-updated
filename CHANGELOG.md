@@ -1,5 +1,13 @@
 # تاریخچه تغییرات افزونه اسپات پلیر
 
+## [25.9] - 1404-03-26
+
+### بهبود پرفورمنس
+- **N+1 داشبورد ادمین رفع شد**: `spot_extra_fetch_requests()` حالا origin order ها را batch-load می‌کند (یک query اضافه به جای N query).
+- **Pagination DB-level در داشبورد**: بدون جستجو — ابتدا IDs-only query برای count، سپس فقط یک صفحه از WC_Order ها fetch می‌شود (`limit=-1` حذف شد). با جستجو fallback به full-scan.
+- **N+1 فرم فرانت رفع شد**: تمام extra request های کاربر در یک query batch-load می‌شوند و `paid_counts`/`pending_set` maps در حلقه استفاده می‌شوند (به جای یک query برای هر سفارش). history table از `$origin_map` استفاده می‌کند، نه `wc_get_order()` جداگانه.
+- **`spot_extra_calc_price_from_count()`** اضافه شد: اگر WC_Order از پیش لود شده باشد برای محاسبه percent، re-fetch نمی‌زند.
+
 ## [25.8] - 1404-03-26
 
 ### فیچر جدید — درخواست دسترسی اضافه برای لایسنس (یکپارچه‌سازی نهایی)

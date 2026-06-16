@@ -15,37 +15,68 @@ function spot_extra_register_admin_page(): void {
 
 // ── Data fetch ───────────────────────────────────────────────────────────────
 
-function spot_extra_fetch_requests(string $search, string $date_from, string $date_to): array {
-	$query = [
-		'limit'      => -1,
+/**
+ * Returns ['rows' => array, 'total' => int].
+ * When no search term: DB-level pagination (fast).
+ * When search term present: full fetch + PHP filter (necessary for name/phone search).
+ * In both cases origin orders are batch-loaded in a single extra query.
+ */
+function spot_extra_fetch_requests(string $search, string $date_from, string $date_to, int $paged = 1, int $per_page = 20): array {
+	$base_args = [
 		'status'     => ['processing', 'completed'],
 		'orderby'    => 'date',
 		'order'      => 'DESC',
 		'meta_query' => [['key' => '_spot_extra_request', 'value' => '1']],
 	];
+	if ($date_from !== '') $base_args['date_created'] = $date_from . '...' . ($date_to ?: date('Y-m-d'));
+	elseif ($date_to !== '') $base_args['date_created'] = '2000-01-01...' . $date_to;
 
-	if ($date_from !== '') $query['date_created'] = $date_from . '...' . ($date_to ?: date('Y-m-d'));
-	elseif ($date_to !== '') $query['date_created'] = '2000-01-01...' . $date_to;
+	if ($search === '') {
+		// Fast path: one IDs-only query for count, then one paginated object query
+		$all_ids  = wc_get_orders(array_merge($base_args, ['limit' => -1, 'return' => 'ids']));
+		$db_total = count($all_ids);
+		$page_ids = array_slice($all_ids, ($paged - 1) * $per_page, $per_page);
+		if (empty($page_ids)) {
+			return ['rows' => [], 'total' => $db_total];
+		}
+		$fetched = wc_get_orders(['include' => $page_ids, 'limit' => count($page_ids)]);
+		// Restore original sort order
+		$omap = [];
+		foreach ($fetched as $o) $omap[$o->get_id()] = $o;
+		$orders = array_values(array_filter(array_map(function ($id) use ($omap) {
+			return $omap[$id] ?? null;
+		}, $page_ids)));
+	} else {
+		// Slow path (search): full fetch, PHP filter, then PHP paginate
+		$orders   = wc_get_orders(array_merge($base_args, ['limit' => -1]));
+		$db_total = null; // computed below after filter
+	}
 
-	$orders = wc_get_orders($query);
-	$rows   = [];
+	// Batch-load all unique origin orders in one query
+	$origin_ids = array_unique(array_filter(array_map(function ($o) {
+		return (int) $o->get_meta('_spot_extra_origin_order');
+	}, $orders)));
+	$origin_map = [];
+	if (!empty($origin_ids)) {
+		foreach (wc_get_orders(['include' => $origin_ids, 'limit' => count($origin_ids)]) as $o)
+			$origin_map[$o->get_id()] = $o;
+	}
 
+	$rows = [];
 	foreach ($orders as $order) {
-		$origin_id    = (int) $order->get_meta('_spot_extra_origin_order');
-		$stage        = (int) $order->get_meta('_spot_extra_stage');
-		$name         = trim($order->get_billing_first_name() . ' ' . $order->get_billing_last_name());
-		$phone        = $order->get_billing_phone();
-		$dt           = $order->get_date_created();
+		$origin_id = (int) $order->get_meta('_spot_extra_origin_order');
+		$name      = trim($order->get_billing_first_name() . ' ' . $order->get_billing_last_name());
+		$phone     = $order->get_billing_phone();
 
-		// Search filter (name or phone)
 		if ($search !== '') {
 			$haystack = mb_strtolower($name . ' ' . $phone);
 			if (mb_strpos($haystack, mb_strtolower($search)) === false) continue;
 		}
 
-		// Resolve course names from origin order
+		$stage        = (int) $order->get_meta('_spot_extra_stage');
+		$dt           = $order->get_date_created();
+		$origin_order = $origin_map[$origin_id] ?? null;
 		$course_names = [];
-		$origin_order = $origin_id ? wc_get_order($origin_id) : null;
 		if ($origin_order instanceof WC_Order) {
 			foreach (spot_woo_order_items($origin_order, true) as $p)
 				$course_names[] = $p->get_name();
@@ -66,7 +97,13 @@ function spot_extra_fetch_requests(string $search, string $date_from, string $da
 		];
 	}
 
-	return $rows;
+	// Search path: apply PHP pagination and compute total
+	if ($search !== '') {
+		$db_total = count($rows);
+		$rows     = array_slice($rows, ($paged - 1) * $per_page, $per_page);
+	}
+
+	return ['rows' => $rows, 'total' => $db_total ?? 0];
 }
 
 // ── SMS status badge helper ──────────────────────────────────────────────────
@@ -96,11 +133,11 @@ function spot_extra_admin_render(): void {
 	$per_page  = 20;
 	$page_url  = admin_url('admin.php?page=spot-extra-access');
 
-	$rows        = spot_extra_fetch_requests($search, $date_from, $date_to);
-	$total_items = count($rows);
+	$result      = spot_extra_fetch_requests($search, $date_from, $date_to, $paged, $per_page);
+	$page_rows   = $result['rows'];
+	$total_items = $result['total'];
 	$total_pages = max(1, (int) ceil($total_items / $per_page));
 	$paged       = min($paged, $total_pages);
-	$page_rows   = array_slice($rows, ($paged - 1) * $per_page, $per_page);
 	$sms_enabled = spot_sms_is_enabled();
 	?>
 	<style>

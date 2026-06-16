@@ -47,15 +47,41 @@ function spot_extra_render_page(): void {
 		],
 	]);
 
-	// Previous paid extra requests by this user
-	$past_requests = wc_get_orders([
+	// Batch-load all extra request orders for this user in ONE query
+	$all_extra = wc_get_orders([
 		'customer'   => $uid,
 		'limit'      => -1,
-		'status'     => ['processing', 'completed'],
+		'status'     => ['processing', 'completed', 'pending', 'on-hold'],
 		'orderby'    => 'date',
 		'order'      => 'DESC',
 		'meta_query' => [['key' => '_spot_extra_request', 'value' => '1']],
 	]);
+	$paid_counts   = [];   // origin_id => count of paid requests
+	$pending_set   = [];   // origin_id => true if a pending request exists
+	$past_requests = [];   // paid extra orders for history table
+	foreach ($all_extra as $ex) {
+		$oid    = (int) $ex->get_meta('_spot_extra_origin_order');
+		$status = $ex->get_status();
+		if (in_array($status, ['processing', 'completed'], true)) {
+			$paid_counts[$oid] = ($paid_counts[$oid] ?? 0) + 1;
+			$past_requests[]   = $ex;
+		} elseif (in_array($status, ['pending', 'on-hold'], true)) {
+			$pending_set[$oid] = true;
+		}
+	}
+
+	// Build origin_map reusing already-loaded licensed orders;
+	// batch-fetch any origins needed for past_requests that aren't in licensed_orders
+	$origin_map = [];
+	foreach ($licensed_orders as $ord) $origin_map[$ord->get_id()] = $ord;
+	$missing = array_unique(array_filter(array_map(function ($r) use ($origin_map) {
+		$oid = (int) $r->get_meta('_spot_extra_origin_order');
+		return isset($origin_map[$oid]) ? null : $oid;
+	}, $past_requests)));
+	if (!empty($missing)) {
+		foreach (wc_get_orders(['include' => $missing, 'limit' => count($missing)]) as $o)
+			$origin_map[$o->get_id()] = $o;
+	}
 
 	$error = get_transient('spot_extra_error_' . $uid);
 	if ($error) delete_transient('spot_extra_error_' . $uid);
@@ -63,7 +89,7 @@ function spot_extra_render_page(): void {
 	$full_name     = trim($customer->get_billing_first_name() . ' ' . $customer->get_billing_last_name());
 	$billing_phone = $customer->get_billing_phone();
 
-	// Build dropdown options and JS price map
+	// Build dropdown options and JS price map using pre-computed data (no per-order queries)
 	$order_options = [];
 	$price_map     = [];
 	foreach ($licensed_orders as $ord) {
@@ -72,8 +98,8 @@ function spot_extra_render_page(): void {
 		$names      = array_map(function ($p) { return $p->get_name(); }, $products);
 		$base_label = implode('، ', $names) ?: 'سفارش #' . $oid;
 
-		$has_pending = spot_extra_has_pending($oid);
-		$calc        = spot_extra_calc_price($oid);
+		$has_pending = isset($pending_set[$oid]);
+		$calc        = spot_extra_calc_price_from_count($oid, $paid_counts[$oid] ?? 0, $ord);
 		$is_blocked  = $calc['blocked'] || $has_pending;
 
 		if ($has_pending) {
@@ -169,7 +195,7 @@ function spot_extra_render_page(): void {
 					<?php foreach ($past_requests as $req):
 						$origin_id    = (int) $req->get_meta('_spot_extra_origin_order');
 						$stage        = (int) $req->get_meta('_spot_extra_stage');
-						$origin_order = $origin_id ? wc_get_order($origin_id) : null;
+						$origin_order = $origin_map[$origin_id] ?? null;
 						$c_names      = [];
 						if ($origin_order instanceof WC_Order) {
 							foreach (spot_woo_order_items($origin_order, true) as $p)
@@ -340,30 +366,56 @@ function spot_extra_origin_total(int $origin_order_id): float {
 	return $total;
 }
 
-// ── Helper: calculate price and stage for an origin order ────────────────────
+// ── Helper: calculate price and stage — core logic ───────────────────────────
 
-function spot_extra_calc_price(int $origin_order_id): array {
+/**
+ * Compute price/stage given a pre-known paid count and optionally a pre-loaded
+ * WC_Order object (avoids re-fetching the order for percent calculation).
+ */
+function spot_extra_calc_price_from_count(int $origin_order_id, int $paid_count, ?WC_Order $origin_order = null): array {
 	$sp     = get_option('spotplayer', []);
 	$stages = array_values((array) ($sp['extra_stages'] ?? []));
 	$mode   = $sp['extra_end_mode'] ?? 'max';
-	$stage  = spot_extra_count_paid_requests($origin_order_id) + 1;
+	$stage  = $paid_count + 1;
 
 	if (empty($stages)) return ['blocked' => true, 'stage' => $stage, 'price' => 0.0];
 
 	if ($stage > count($stages)) {
 		if ($mode === 'max') return ['blocked' => true, 'stage' => $stage, 'price' => 0.0];
-		$def = end($stages); // repeat_last
+		$def = end($stages);
 	} else {
 		$def = $stages[$stage - 1];
 	}
 
 	$type  = $def['type']  ?? 'fixed';
 	$value = floatval($def['value'] ?? 0);
-	$price = ($type === 'percent')
-		? round($value / 100 * spot_extra_origin_total($origin_order_id))
-		: $value;
+
+	if ($type === 'percent') {
+		if (!($origin_order instanceof WC_Order)) $origin_order = wc_get_order($origin_order_id);
+		$total = 0.0;
+		if ($origin_order instanceof WC_Order) {
+			foreach ($origin_order->get_items() as $item) {
+				if (!($item instanceof WC_Order_Item_Product)) continue;
+				$product = $item->get_product();
+				if (!($product instanceof WC_Product)) continue;
+				$total += floatval($product->get_price()) * $item->get_quantity();
+			}
+		}
+		$price = round($value / 100 * $total);
+	} else {
+		$price = $value;
+	}
 
 	return ['blocked' => false, 'stage' => $stage, 'price' => $price];
+}
+
+// ── Helper: calculate price and stage for an origin order ────────────────────
+
+function spot_extra_calc_price(int $origin_order_id): array {
+	return spot_extra_calc_price_from_count(
+		$origin_order_id,
+		spot_extra_count_paid_requests($origin_order_id)
+	);
 }
 
 // ── Daily report: next fire timestamp ────────────────────────────────────────
