@@ -365,3 +365,79 @@ function spot_extra_calc_price(int $origin_order_id): array {
 
 	return ['blocked' => false, 'stage' => $stage, 'price' => $price];
 }
+
+// ── Daily report: next fire timestamp ────────────────────────────────────────
+
+function spot_extra_next_report_timestamp(string $time): int {
+	$tz  = wp_timezone();
+	$now = new DateTime('now', $tz);
+	$dt  = new DateTime('today ' . $time, $tz);
+	if ($dt <= $now) $dt->modify('+1 day');
+	return $dt->getTimestamp();
+}
+
+// ── Daily report: schedule registration ──────────────────────────────────────
+
+function spot_extra_schedule_daily_report(): void {
+	$sp          = get_option('spotplayer', []);
+	$report_time = (string) ($sp['extra_report_time'] ?? '08:00');
+	if (!preg_match('/^([01]\d|2[0-3]):[0-5]\d$/', $report_time)) $report_time = '08:00';
+
+	if (function_exists('as_next_scheduled_action')) {
+		if (!as_next_scheduled_action('spot_extra_daily_report')) {
+			as_schedule_recurring_action(
+				spot_extra_next_report_timestamp($report_time),
+				DAY_IN_SECONDS,
+				'spot_extra_daily_report'
+			);
+		}
+		return;
+	}
+
+	// WP-Cron fallback — no exact-time guarantee
+	if (!wp_next_scheduled('spot_extra_daily_report'))
+		wp_schedule_event(time(), 'daily', 'spot_extra_daily_report');
+}
+add_action('init', 'spot_extra_schedule_daily_report');
+
+// ── Daily report: reschedule when report time setting changes ─────────────────
+
+function spot_extra_reschedule_report(array $old_value, array $new_value): void {
+	if (($old_value['extra_report_time'] ?? '') === ($new_value['extra_report_time'] ?? '')) return;
+
+	if (function_exists('as_unschedule_all_actions')) {
+		as_unschedule_all_actions('spot_extra_daily_report');
+	} else {
+		$ts = wp_next_scheduled('spot_extra_daily_report');
+		if ($ts) wp_unschedule_event($ts, 'spot_extra_daily_report');
+	}
+	// spot_extra_schedule_daily_report() re-registers on the next init
+}
+add_action('update_option_spotplayer', 'spot_extra_reschedule_report', 10, 2);
+
+// ── Daily report: handler ─────────────────────────────────────────────────────
+
+add_action('spot_extra_daily_report', 'spot_extra_handle_daily_report');
+function spot_extra_handle_daily_report(): void {
+	if (!spot_sms_is_enabled()) return;
+
+	$sp          = get_option('spotplayer', []);
+	$admin_phone = spot_sms_normalize_phone((string) ($sp['extra_admin_phone'] ?? ''));
+	if (!$admin_phone) return;
+
+	$count = count(wc_get_orders([
+		'limit'        => -1,
+		'return'       => 'ids',
+		'status'       => ['processing', 'completed'],
+		'date_created' => (time() - DAY_IN_SECONDS) . '...' . time(),
+		'meta_query'   => [['key' => '_spot_extra_request', 'value' => '1']],
+	]));
+
+	if ($count === 0) return;
+
+	$site = get_bloginfo('name');
+	spot_sms_send_raw(
+		$admin_phone,
+		'سلام. در ۲۴ ساعت گذشته ' . $count . ' درخواست دسترسی اضافه لایسنس در ' . $site . ' ثبت شد. لطفاً داشبورد را بررسی کنید.'
+	);
+}

@@ -1,5 +1,12 @@
 # تاریخچه تغییرات افزونه اسپات پلیر
 
+## [25.7] - 1404-03-26
+
+### فیچر جدید (فاز ۹ — گزارش روزانه ادمین)
+- **`spot_extra_schedule_daily_report()`**: هنگام `init` اگر AS موجود باشد یک recurring action روزانه در ساعت `extra_report_time` ثبت می‌کند؛ در غیر این صورت به WP-Cron daily fallback می‌دهد.
+- **`spot_extra_reschedule_report()`**: روی `update_option_spotplayer` — اگر `extra_report_time` تغییر کند، action قبلی لغو و در اولین init بعدی مجدد ثبت می‌شود.
+- **`spot_extra_handle_daily_report()`**: درخواست‌های paid ۲۴ ساعت گذشته را می‌شمارد؛ اگر صفر باشد پیامکی ارسال نمی‌شود؛ در غیر این صورت گزارش به `extra_admin_phone` می‌رود.
+
 ## [25.6] - 1404-03-26
 
 ### فیچر جدید (فاز ۸ — پیامک اختصاصی دسترسی اضافه)
