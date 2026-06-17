@@ -14,7 +14,7 @@ function spot_request(string $url, $data = null) {
 			['Content-Type' => 'application/json', '$Level' => '-1', '$API' => get_option('spotplayer')['api'], 'X-WpSpot' => 12],
 			$body,
 			$method,
-			['verify' => file_exists($ca_bundle) ? $ca_bundle : true]
+			['verify' => file_exists($ca_bundle) ? $ca_bundle : true, 'timeout' => 30]
 		)->body,
 		true
 	);
