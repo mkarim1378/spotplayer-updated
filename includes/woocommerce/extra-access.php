@@ -31,7 +31,7 @@ function spot_extra_render_page(): void {
 	}
 	?>
 	<style>
-	.spot-extra-wrap { max-width:640px; direction:rtl; }
+	.spot-extra-wrap {direction:rtl; }
 	.spot-extra-form {
 		background:#fff; border:1px solid #e2e8f0; border-radius:8px;
 		padding:28px; margin-bottom:28px;
@@ -69,7 +69,8 @@ function spot_extra_render_page(): void {
 		background:#9ca3af; border-color:#9ca3af; cursor:not-allowed;
 	}
 	.spot-extra-history { width:100%; border-collapse:collapse; font-size:13px; }
-	.spot-extra-history th {
+	.spot-extra-history th, .spot-extra-history td { text-align:center !important; }
+.spot-extra-history th {
 		background:#f9fafb; padding:8px 12px;
 		border:1px solid #e5e7eb; font-weight:600;
 	}

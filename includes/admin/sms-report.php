@@ -71,6 +71,214 @@ function spot_sms_report_build_meta_query(string $status): array {
 function spot_sms_report_render(): void {
 	if (!current_user_can('manage_options')) return;
 
+	// ── پردازش فرم تنظیمات پیامک ─────────────────────────────────────────────
+	$sms_notice = '';
+	if (isset($_POST['spot_save_sms']) && check_admin_referer('spot_save_sms', 'spot_sms_nonce')) {
+		$sp_opt = get_option('spotplayer', []);
+		$old_report_time = $sp_opt['extra_report_time'] ?? '';
+
+		$sp_opt['sms_enabled']                    = !empty($_POST['spotplayer']['sms_enabled']) ? 1 : 0;
+		$sp_opt['sms_username']                   = sanitize_text_field($_POST['spotplayer']['sms_username'] ?? '');
+		$sp_opt['sms_password']                   = sanitize_text_field($_POST['spotplayer']['sms_password'] ?? '');
+		$sp_opt['sms_from']                       = sanitize_text_field($_POST['spotplayer']['sms_from'] ?? '');
+		$sp_opt['sms_from1']                      = sanitize_text_field($_POST['spotplayer']['sms_from1'] ?? '');
+		$sp_opt['sms_from2']                      = sanitize_text_field($_POST['spotplayer']['sms_from2'] ?? '');
+		$sp_opt['sms_template']                   = sanitize_textarea_field($_POST['spotplayer']['sms_template'] ?? '');
+		$sp_opt['sms_template_installment_mid']   = sanitize_textarea_field($_POST['spotplayer']['sms_template_installment_mid'] ?? '');
+		$sp_opt['sms_template_installment_final'] = sanitize_textarea_field($_POST['spotplayer']['sms_template_installment_final'] ?? '');
+		$sp_opt['sms_template_reminder']          = sanitize_textarea_field($_POST['spotplayer']['sms_template_reminder'] ?? '');
+		$sp_opt['sms_template_extra']             = sanitize_textarea_field($_POST['spotplayer']['sms_template_extra'] ?? '');
+		$sp_opt['extra_admin_phone']              = sanitize_text_field($_POST['spotplayer']['extra_admin_phone'] ?? '');
+		$sp_opt['extra_report_time']              = sanitize_text_field($_POST['spotplayer']['extra_report_time'] ?? '08:00');
+
+		update_option('spotplayer', $sp_opt);
+
+		$new_report_time = $sp_opt['extra_report_time'];
+		if ($old_report_time !== $new_report_time && function_exists('spot_extra_reschedule_report')) {
+			spot_extra_reschedule_report($old_report_time, $new_report_time);
+		}
+
+		$sms_notice = '<div class="notice notice-success is-dismissible"><p>✅ تنظیمات پیامک ذخیره شد.</p></div>';
+	}
+
+	$sp = get_option('spotplayer', []);
+	?>
+	<style>
+	.sp-card { background:#fff; border:1px solid #c3c4c7; border-radius:4px; padding:20px 24px; margin-bottom:20px; }
+	.sp-card h2 { margin:0 0 16px; padding:0 0 12px; border-bottom:1px solid #f0f0f1; font-size:15px; }
+	.sp-field { margin-bottom:16px; }
+	.sp-field:last-child { margin-bottom:0; }
+	.sp-field > label { display:block; font-weight:600; margin-bottom:5px; }
+	.sp-field input[type=text], .sp-field textarea { width:100%; max-width:460px; }
+	.sp-field textarea { height:80px; font-family:monospace; direction:ltr; resize:vertical; }
+	.sp-check { display:flex; align-items:flex-start; gap:10px; padding:10px 14px; border-radius:3px; background:#f9f9f9; border:1px solid #f0f0f1; margin-bottom:8px; }
+	.sp-check input[type=checkbox] { margin-top:3px; flex-shrink:0; }
+	.sp-check-label { font-weight:600; display:block; margin-bottom:2px; cursor:pointer; }
+	.sp-check-desc { color:#646970; font-size:12px; }
+	.sp-warn { color:#9e2a2a; font-size:12px; margin-top:3px; }
+	.sp-sms-counter { font-size:12px; color:#646970; margin-top:4px; }
+	.sp-sms-template { direction:rtl !important; font-family:inherit !important; }
+	</style>
+
+	<div class="wrap" dir="rtl" style="max-width:900px">
+
+	<?= $sms_notice ?>
+
+	<div class="sp-card" style="margin-bottom:28px">
+		<h2>📲 تنظیمات پیامک</h2>
+		<form method="post">
+			<?php wp_nonce_field('spot_save_sms', 'spot_sms_nonce') ?>
+			<input type="hidden" name="spot_save_sms" value="1">
+
+			<div class="sp-check" style="margin-bottom:16px">
+				<input type="checkbox" id="sp-sms-enabled" name="spotplayer[sms_enabled]" value="1" <?= !empty($sp['sms_enabled']) ? 'checked' : '' ?>>
+				<div>
+					<label class="sp-check-label" for="sp-sms-enabled">ارسال خودکار پیامک پس از صدور لایسنس</label>
+					<div class="sp-check-desc">پس از ایجاد موفق لایسنس، دو پیامک به شماره مشتری ارسال می‌شود: ابتدا متن توضیحات، سپس کد لایسنس به تنهایی.</div>
+				</div>
+			</div>
+			<div class="sp-field">
+				<label>نام کاربری پیامیتو</label>
+				<input type="text" name="spotplayer[sms_username]" value="<?= esc_attr(@$sp['sms_username']) ?>" autocomplete="off">
+			</div>
+			<div class="sp-field">
+				<label>کلید API وب‌سرویس پیامیتو</label>
+				<input type="text" name="spotplayer[sms_password]" value="<?= esc_attr(@$sp['sms_password']) ?>" style="direction:ltr" autocomplete="off">
+				<p class="description" style="margin-top:4px">از منوی <b>توسعه‌دهندگان</b> در پنل پیامیتو — رمز ورود معمولی حساب شما نیست.</p>
+			</div>
+			<div class="sp-field">
+				<label>شماره فرستنده اصلی</label>
+				<input type="text" name="spotplayer[sms_from]" value="<?= esc_attr(@$sp['sms_from']) ?>" style="direction:ltr" placeholder="10004...">
+			</div>
+			<div class="sp-field">
+				<label>شماره بکاپ ۱ <span style="font-weight:normal;color:#646970">(اختیاری)</span></label>
+				<input type="text" name="spotplayer[sms_from1]" value="<?= esc_attr(@$sp['sms_from1']) ?>" style="direction:ltr">
+			</div>
+			<div class="sp-field">
+				<label>شماره بکاپ ۲ <span style="font-weight:normal;color:#646970">(اختیاری)</span></label>
+				<input type="text" name="spotplayer[sms_from2]" value="<?= esc_attr(@$sp['sms_from2']) ?>" style="direction:ltr">
+			</div>
+			<div class="sp-field">
+				<label>متن پیامک توضیحات</label>
+				<textarea id="sp-sms-template" name="spotplayer[sms_template]" class="sp-sms-template" style="height:100px"><?= esc_textarea(@$sp['sms_template']) ?></textarea>
+				<div id="sp-sms-counter" class="sp-sms-counter"></div>
+				<p class="description" style="margin-top:6px">
+					متغیرها: <code>{customer_name}</code> <code>{order_id}</code> <code>{course_names}</code> <code>{site_name}</code> <code>{site_url}</code><br>
+					<span class="sp-warn">⚠ استفاده از <code>{site_url}</code> ممکن است باعث خطای «حاوی لینک» از پیامیتو شود.</span><br>
+					<span class="sp-warn">⚠ پیامک دوم به‌صورت خودکار فقط کد لایسنس ارسال می‌شود. <code>{license_key}</code> در این متن جایگزین نخواهد شد.</span>
+				</p>
+			</div>
+			<div class="sp-field">
+				<label>متن پیامک قسط میانی <span style="font-weight:normal;color:#646970">(پس از پرداخت قسط ۲، ۳، ... — بدون ارسال کد لایسنس)</span></label>
+				<textarea name="spotplayer[sms_template_installment_mid]" class="sp-sms-template" style="height:100px"><?= esc_textarea(@$sp['sms_template_installment_mid']) ?></textarea>
+				<p class="description" style="margin-top:6px">
+					متغیرها: <code>{customer_name}</code> <code>{course_names}</code> <code>{installment_number}</code> <code>{total_installments}</code> <code>{order_id}</code>
+				</p>
+			</div>
+			<div class="sp-field">
+				<label>متن پیامک قسط آخر <span style="font-weight:normal;color:#646970">(پس از پرداخت آخرین قسط)</span></label>
+				<textarea name="spotplayer[sms_template_installment_final]" class="sp-sms-template" style="height:100px"><?= esc_textarea(@$sp['sms_template_installment_final']) ?></textarea>
+				<p class="description" style="margin-top:6px">
+					متغیرها: <code>{customer_name}</code> <code>{course_names}</code> <code>{total_installments}</code> <code>{order_id}</code>
+				</p>
+			</div>
+			<div class="sp-field">
+				<label>متن پیامک یادآور سررسید <span style="font-weight:normal;color:#646970">(ارسال دستی از داشبورد اقساط)</span></label>
+				<textarea name="spotplayer[sms_template_reminder]" class="sp-sms-template" style="height:100px"><?= esc_textarea(@$sp['sms_template_reminder']) ?></textarea>
+				<p class="description" style="margin-top:6px">
+					متغیرها: <code>{customer_name}</code> <code>{course_names}</code> <code>{next_installment_number}</code> <code>{total_installments}</code> <code>{due_date}</code> <code>{order_id}</code>
+				</p>
+			</div>
+			<hr style="margin:20px 0 16px;border:none;border-top:1px solid #f0f0f1">
+			<p style="font-weight:600;font-size:13px;margin:0 0 12px;color:#1d2327">💳 پیامک دسترسی اضافه لایسنس</p>
+			<div class="sp-field">
+				<label>متن پیامک دسترسی اضافه <span style="font-weight:normal;color:#646970">(ارسال خودکار پس از پرداخت موفق)</span></label>
+				<textarea name="spotplayer[sms_template_extra]" class="sp-sms-template" style="height:100px"><?= esc_textarea(@$sp['sms_template_extra']) ?></textarea>
+				<p class="description" style="margin-top:6px">
+					متغیرها: <code>{customer_name}</code> <code>{course_names}</code> <code>{order_id}</code> <code>{site_name}</code><br>
+					<span class="sp-warn">⚠ پیامک دوم به‌صورت خودکار فقط کد لایسنس ارسال می‌شود.</span>
+				</p>
+			</div>
+
+			<hr style="margin:20px 0 16px;border:none;border-top:1px solid #f0f0f1">
+			<p style="font-weight:600;font-size:13px;margin:0 0 12px;color:#1d2327">📊 گزارش روزانه درخواست‌های دسترسی اضافه</p>
+			<div class="sp-field">
+				<label>شماره موبایل ادمین برای گزارش روزانه</label>
+				<input type="text" name="spotplayer[extra_admin_phone]" value="<?= esc_attr(@$sp['extra_admin_phone']) ?>" placeholder="09XXXXXXXXX" style="direction:ltr;max-width:200px">
+				<p class="description" style="margin-top:4px">اگر در ۲۴ ساعت گذشته درخواستی ثبت شده باشد، در ساعت تعیین‌شده یک پیامک خلاصه ارسال می‌شود. اگر درخواستی نبود، پیامکی ارسال نمی‌شود.</p>
+			</div>
+			<div class="sp-field">
+				<label>ساعت ارسال گزارش روزانه</label>
+				<input type="time" name="spotplayer[extra_report_time]" value="<?= esc_attr(@$sp['extra_report_time'] ?: '08:00') ?>" style="direction:ltr;max-width:120px">
+				<p class="description" style="margin-top:4px">بر اساس تایم‌زون سایت. برای دقت ساعت، Action Scheduler باید نصب باشد.</p>
+			</div>
+
+			<hr style="margin:20px 0 16px;border:none;border-top:1px solid #f0f0f1">
+			<div class="sp-field">
+				<label>ارسال پیامک آزمایشی</label>
+				<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+					<input type="text" id="sp-sms-test-phone" placeholder="09XXXXXXXXX" style="width:160px;direction:ltr;max-width:160px">
+					<button type="button" id="sp-sms-test-btn" class="button">ارسال آزمایشی</button>
+					<span id="sp-sms-test-result" style="font-size:13px"></span>
+				</div>
+				<p class="description" style="margin-top:4px">با مقادیر فعلی فرم تست می‌کند — نیازی به ذخیره قبلی ندارد.</p>
+			</div>
+
+			<p style="margin-top:20px">
+				<?php submit_button('ذخیره تنظیمات پیامک', 'primary', 'spot_sms_submit', false) ?>
+			</p>
+		</form>
+	</div>
+
+	<script>
+	(function(){
+		// ── شمارنده کاراکتر پیامک ──────────────────────────────────────────
+		var ta     = document.getElementById('sp-sms-template');
+		var smsCtr = document.getElementById('sp-sms-counter');
+		if (ta && smsCtr) {
+			function updateCounter() {
+				var len = ta.value.length, parts = len === 0 ? 0 : Math.ceil(len / 70);
+				smsCtr.textContent = len > 0 ? len + ' کاراکتر — حدود ' + parts + ' پارت پیامک فارسی (هر پارت ۷۰ کاراکتر)' : '';
+				smsCtr.style.color = len > 140 ? '#9e2a2a' : '#646970';
+			}
+			ta.addEventListener('input', updateCounter);
+			updateCounter();
+		}
+
+		// ── ارسال پیامک آزمایشی ────────────────────────────────────────────
+		var smsBtn = document.getElementById('sp-sms-test-btn');
+		var smsRes = document.getElementById('sp-sms-test-result');
+		if (smsBtn) {
+			smsBtn.addEventListener('click', function () {
+				var phone = document.getElementById('sp-sms-test-phone').value.trim();
+				if (!phone) { smsRes.textContent = 'شماره موبایل را وارد کنید.'; smsRes.style.color = '#c00'; return; }
+				smsBtn.disabled = true;
+				smsRes.textContent = '⏳ در حال ارسال…'; smsRes.style.color = '#646970';
+				var fd = new FormData();
+				fd.append('action',       'spot_test_sms');
+				fd.append('nonce',        <?= json_encode(wp_create_nonce('spot_test_sms')) ?>);
+				fd.append('phone',        phone);
+				fd.append('sms_username', document.querySelector('[name="spotplayer[sms_username]"]').value);
+				fd.append('sms_password', document.querySelector('[name="spotplayer[sms_password]"]').value);
+				fd.append('sms_from',     document.querySelector('[name="spotplayer[sms_from]"]').value);
+				fd.append('sms_from1',    document.querySelector('[name="spotplayer[sms_from1]"]').value);
+				fd.append('sms_from2',    document.querySelector('[name="spotplayer[sms_from2]"]').value);
+				fetch(<?= json_encode(admin_url('admin-ajax.php')) ?>, {method: 'POST', body: fd})
+					.then(function (r) { return r.json(); })
+					.then(function (res) {
+						smsRes.textContent = res.success ? '✅ ' + res.data : '❌ ' + (res.data || 'خطای نامشخص');
+						smsRes.style.color  = res.success ? '#1a7a1a' : '#c00';
+					})
+					.catch(function () { smsRes.textContent = '❌ خطا در ارتباط با سرور.'; smsRes.style.color = '#c00'; })
+					.finally(function () { smsBtn.disabled = false; });
+			});
+		}
+	})();
+	</script>
+	</div><!-- /wrap settings card -->
+
+	<?php
+	// Reset the wrap for the report section below
 	$status    = sanitize_key($_GET['sms_status'] ?? 'all');
 	$date_from = sanitize_text_field($_GET['date_from'] ?? date('Y-m-d', strtotime('-30 days')));
 	$date_to   = sanitize_text_field($_GET['date_to']   ?? date('Y-m-d'));

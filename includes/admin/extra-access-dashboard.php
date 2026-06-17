@@ -143,6 +143,48 @@ function spot_extra_sms_badge(string $status): string {
 function spot_extra_admin_render(): void {
 	if (!current_user_can('manage_options')) return;
 
+	// ── پردازش فرم تنظیمات دسترسی اضافه ─────────────────────────────────────
+	$extra_notice = '';
+	if (isset($_POST['spot_save_extra']) && check_admin_referer('spot_save_extra', 'spot_extra_nonce')) {
+		// Global fallback stages
+		$stages = [];
+		foreach ((array)($_POST['spot_extra_stages'] ?? []) as $row) {
+			$type  = sanitize_key($row['type'] ?? '');
+			$value = floatval($row['value'] ?? 0);
+			if (!in_array($type, ['fixed', 'percent'], true) || $value <= 0) continue;
+			$stages[] = ['type' => $type, 'value' => $value];
+		}
+		$end_mode = sanitize_key($_POST['spot_extra_end_mode'] ?? 'max');
+		if (!in_array($end_mode, ['max', 'repeat_last'], true)) $end_mode = 'max';
+
+		// Per-course stages
+		$course_stages = [];
+		foreach ((array)($_POST['spot_extra_course_stages'] ?? []) as $raw_cid => $data) {
+			$cid = sanitize_text_field($raw_cid);
+			if (empty($cid)) continue;
+			$cstages = [];
+			foreach ((array)($data['stages'] ?? []) as $row) {
+				$type  = sanitize_key($row['type'] ?? '');
+				$value = floatval($row['value'] ?? 0);
+				if (!in_array($type, ['fixed', 'percent'], true) || $value <= 0) continue;
+				$cstages[] = ['type' => $type, 'value' => $value];
+			}
+			$cmode = sanitize_key($data['end_mode'] ?? 'max');
+			if (!in_array($cmode, ['max', 'repeat_last'], true)) $cmode = 'max';
+			$course_stages[$cid] = ['stages' => $cstages, 'end_mode' => $cmode];
+		}
+
+		$sp_opt = get_option('spotplayer', []);
+		$sp_opt['extra_stages']        = $stages;
+		$sp_opt['extra_end_mode']      = $end_mode;
+		$sp_opt['extra_course_stages'] = $course_stages;
+		update_option('spotplayer', $sp_opt);
+
+		$extra_notice = '<div class="notice notice-success is-dismissible"><p>✅ تنظیمات دسترسی اضافه ذخیره شد.</p></div>';
+	}
+
+	$sp = get_option('spotplayer', []);
+
 	$search    = sanitize_text_field($_GET['search']    ?? '');
 	$date_from = sanitize_text_field($_GET['date_from'] ?? '');
 	$date_to   = sanitize_text_field($_GET['date_to']   ?? '');
@@ -159,13 +201,223 @@ function spot_extra_admin_render(): void {
 	?>
 	<style>
 	.sp-extra-page table th, .sp-extra-page table td { text-align:right !important }
+	/* ── Extra pricing settings ── */
+	.sp-card { background:#fff; border:1px solid #c3c4c7; border-radius:4px; padding:20px 24px; margin-bottom:20px; }
+	.sp-card h2 { margin:0 0 16px; padding:0 0 12px; border-bottom:1px solid #f0f0f1; font-size:15px; }
+	.sp-stages-table { width:100%; border-collapse:collapse; margin-bottom:12px; max-width:560px; }
+	.sp-stages-table th { text-align:right; padding:6px 8px; background:#f6f7f7; border-bottom:1px solid #dcdcde; font-size:12px; font-weight:600; }
+	.sp-stages-table td { padding:5px 8px; border-bottom:1px solid #f0f0f1; vertical-align:middle; }
+	.sp-stages-table td select, .sp-stages-table td input[type=number] { width:100%; margin:0; }
+	.sp-stage-remove { color:#c00; border-color:#c00; padding:2px 8px; min-height:0; height:26px; line-height:24px; }
+	.sp-end-mode-opt { display:flex; align-items:flex-start; gap:10px; padding:10px 14px; border-radius:3px; background:#f9f9f9; border:1px solid #f0f0f1; margin-bottom:8px; cursor:pointer; }
+	.sp-end-mode-opt:last-child { margin-bottom:0; }
+	.sp-end-mode-opt input[type=radio] { margin-top:3px; flex-shrink:0; }
+	.sp-course-extra { border:1px solid #dcdcde; border-radius:4px; margin-bottom:10px; }
+	.sp-course-extra > summary { cursor:pointer; padding:10px 14px; background:#f6f7f7; border-radius:4px; list-style:none; display:flex; align-items:center; gap:8px; }
+	.sp-course-extra > summary::-webkit-details-marker { display:none; }
+	.sp-course-extra > summary::before { content:'▶'; font-size:10px; margin-left:4px; transition:transform .15s; display:inline-block; }
+	.sp-course-extra[open] > summary::before { transform:rotate(90deg); }
+	.sp-course-extra-body { padding:14px 16px 18px; }
+	.sp-extra-fallback { border-style:dashed; margin-top:16px; }
 	</style>
 	<div class="wrap sp-extra-page">
+
+	<?= $extra_notice ?>
+
+	<!-- ── تنظیمات قیمت‌گذاری دسترسی اضافه ── -->
+	<details style="border:1px solid #c3c4c7;border-radius:4px;margin-bottom:24px;background:#fff">
+		<summary style="cursor:pointer;padding:14px 20px;background:#f6f7f7;border-radius:4px;list-style:none;display:flex;align-items:center;gap:8px;font-weight:600;font-size:14px">
+			💳 تنظیمات قیمت‌گذاری دسترسی اضافه
+		</summary>
+		<div style="padding:20px 24px">
+			<p style="margin-top:0;color:#646970;font-size:13px">برای هر دوره پله‌های قیمت جداگانه تعریف کنید. اگر دوره‌ای پله‌ای نداشته باشد، از بخش «پیش‌فرض» در انتها استفاده می‌شود.</p>
+
+			<form method="post">
+				<?php wp_nonce_field('spot_save_extra', 'spot_extra_nonce') ?>
+				<input type="hidden" name="spot_save_extra" value="1">
+
+				<?php
+				$all_courses   = get_option('spot_courses', []);
+				$course_stages = $sp['extra_course_stages'] ?? [];
+
+				if (empty($all_courses)): ?>
+					<div class="notice notice-warning inline"><p>ابتدا دوره‌ها را در تنظیمات > دوره‌ها تعریف کنید.</p></div>
+				<?php else:
+					foreach ($all_courses as $course):
+						$cid    = $course['id']   ?? '';
+						$cname  = $course['name'] ?? $cid;
+						$cdata  = $course_stages[$cid] ?? [];
+						$cstages = $cdata['stages']   ?? [];
+						$cmode   = $cdata['end_mode'] ?? 'max';
+						$has_stages = !empty($cstages);
+				?>
+				<details class="sp-course-extra" <?= $has_stages ? 'open' : '' ?>>
+					<summary>
+						<strong><?= esc_html($cname) ?></strong>
+						<small style="color:#646970;font-family:monospace;font-size:11px"><?= esc_html($cid) ?></small>
+						<?php if ($has_stages): ?>
+							<span style="color:#2a7a2a;font-size:11px;font-weight:600"><?= count($cstages) ?> پله</span>
+						<?php else: ?>
+							<span style="color:#999;font-size:11px">بدون پله — از پیش‌فرض استفاده می‌شود</span>
+						<?php endif; ?>
+					</summary>
+					<div class="sp-course-extra-body">
+						<table class="sp-stages-table">
+							<thead><tr>
+								<th style="width:12%">پله</th>
+								<th style="width:40%">نوع</th>
+								<th style="width:33%">مقدار</th>
+								<th style="width:15%"></th>
+							</tr></thead>
+							<tbody class="sp-stages-tbody" data-cid="<?= esc_attr($cid) ?>">
+							<?php foreach ($cstages as $si => $stage): ?>
+								<tr>
+									<td style="text-align:center;font-weight:600;color:#646970"><?= $si + 1 ?></td>
+									<td>
+										<select name="spot_extra_course_stages[<?= esc_attr($cid) ?>][stages][<?= $si ?>][type]">
+											<option value="fixed"   <?= ($stage['type'] ?? '') === 'fixed'   ? 'selected' : '' ?>>مبلغ ثابت (تومان)</option>
+											<option value="percent" <?= ($stage['type'] ?? '') === 'percent' ? 'selected' : '' ?>>درصد از مجموع سفارش</option>
+										</select>
+									</td>
+									<td><input type="number" name="spot_extra_course_stages[<?= esc_attr($cid) ?>][stages][<?= $si ?>][value]" value="<?= esc_attr($stage['value'] ?? '') ?>" min="0" step="any" placeholder="مثلاً 500000"></td>
+									<td><button type="button" class="button sp-stage-remove">✕</button></td>
+								</tr>
+							<?php endforeach; ?>
+							</tbody>
+						</table>
+						<button type="button" class="button sp-add-stage-course">+ افزودن پله</button>
+
+						<hr style="margin:14px 0;border:none;border-top:1px solid #f0f0f1">
+						<p style="font-weight:600;margin:0 0 8px;font-size:13px">رفتار بعد از آخرین پله</p>
+						<label class="sp-end-mode-opt">
+							<input type="radio" name="spot_extra_course_stages[<?= esc_attr($cid) ?>][end_mode]" value="max" <?= $cmode === 'max' ? 'checked' : '' ?>>
+							<div><span style="font-weight:600;display:block;margin-bottom:2px">حداکثر N بار</span><span style="color:#646970;font-size:12px">بعد از آخرین پله، ثبت درخواست جدید ممکن نخواهد بود.</span></div>
+						</label>
+						<label class="sp-end-mode-opt">
+							<input type="radio" name="spot_extra_course_stages[<?= esc_attr($cid) ?>][end_mode]" value="repeat_last" <?= $cmode === 'repeat_last' ? 'checked' : '' ?>>
+							<div><span style="font-weight:600;display:block;margin-bottom:2px">تکرار قیمت پله آخر</span><span style="color:#646970;font-size:12px">از پله آخر به بعد همان مبلغ اعمال می‌شود.</span></div>
+						</label>
+					</div>
+				</details>
+				<?php endforeach; endif; ?>
+
+				<!-- ── پیش‌فرض (fallback) ── -->
+				<details class="sp-course-extra sp-extra-fallback">
+					<summary>
+						<strong>پیش‌فرض</strong>
+						<small style="color:#646970;font-size:11px">برای سفارش‌هایی که دوره‌شان پله تعریف‌شده ندارد</small>
+					</summary>
+					<div class="sp-course-extra-body">
+						<table class="sp-stages-table">
+							<thead><tr>
+								<th style="width:12%">پله</th><th style="width:40%">نوع</th><th style="width:33%">مقدار</th><th style="width:15%"></th>
+							</tr></thead>
+							<tbody id="sp-stages-tbody">
+							<?php
+							$saved_stages = $sp['extra_stages'] ?? [];
+							foreach ($saved_stages as $si => $stage): ?>
+								<tr>
+									<td style="text-align:center;font-weight:600;color:#646970"><?= $si + 1 ?></td>
+									<td>
+										<select name="spot_extra_stages[<?= $si ?>][type]">
+											<option value="fixed"   <?= ($stage['type'] ?? '') === 'fixed'   ? 'selected' : '' ?>>مبلغ ثابت (تومان)</option>
+											<option value="percent" <?= ($stage['type'] ?? '') === 'percent' ? 'selected' : '' ?>>درصد از مجموع سفارش</option>
+										</select>
+									</td>
+									<td><input type="number" name="spot_extra_stages[<?= $si ?>][value]" value="<?= esc_attr($stage['value'] ?? '') ?>" min="0" step="any" placeholder="مثلاً 500000"></td>
+									<td><button type="button" class="button sp-stage-remove">✕</button></td>
+								</tr>
+							<?php endforeach; ?>
+							</tbody>
+						</table>
+						<button type="button" id="sp-add-stage" class="button">+ افزودن پله</button>
+						<hr style="margin:14px 0;border:none;border-top:1px solid #f0f0f1">
+						<p style="font-weight:600;margin:0 0 8px;font-size:13px">رفتار بعد از آخرین پله</p>
+						<?php $end_mode_val = $sp['extra_end_mode'] ?? 'max'; ?>
+						<label class="sp-end-mode-opt">
+							<input type="radio" name="spot_extra_end_mode" value="max" <?= $end_mode_val === 'max' ? 'checked' : '' ?>>
+							<div><span style="font-weight:600;display:block;margin-bottom:2px">حداکثر N بار</span><span style="color:#646970;font-size:12px">بعد از آخرین پله، ثبت درخواست جدید ممکن نخواهد بود.</span></div>
+						</label>
+						<label class="sp-end-mode-opt">
+							<input type="radio" name="spot_extra_end_mode" value="repeat_last" <?= $end_mode_val === 'repeat_last' ? 'checked' : '' ?>>
+							<div><span style="font-weight:600;display:block;margin-bottom:2px">تکرار قیمت پله آخر</span><span style="color:#646970;font-size:12px">از پله آخر به بعد همان مبلغ اعمال می‌شود.</span></div>
+						</label>
+					</div>
+				</details>
+
+				<p style="margin-top:20px">
+					<?php submit_button('ذخیره تنظیمات دسترسی اضافه', 'primary', 'spot_extra_submit', false) ?>
+				</p>
+			</form>
+		</div>
+	</details>
+
+	<script>
+	(function () {
+		function reindex(tbody) {
+			var cid = tbody.dataset.cid || null;
+			tbody.querySelectorAll('tr').forEach(function (tr, i) {
+				tr.querySelector('td:first-child').textContent = i + 1;
+				if (cid) {
+					tr.querySelector('select').name = 'spot_extra_course_stages[' + cid + '][stages][' + i + '][type]';
+					tr.querySelector('input[type=number]').name = 'spot_extra_course_stages[' + cid + '][stages][' + i + '][value]';
+				} else {
+					tr.querySelector('select').name = 'spot_extra_stages[' + i + '][type]';
+					tr.querySelector('input[type=number]').name = 'spot_extra_stages[' + i + '][value]';
+				}
+			});
+		}
+
+		function makeRow(tbody) {
+			var cid = tbody.dataset.cid || null;
+			var i   = tbody.querySelectorAll('tr').length;
+			var tr  = document.createElement('tr');
+			var sName = cid
+				? 'spot_extra_course_stages[' + cid + '][stages][' + i + '][type]'
+				: 'spot_extra_stages[' + i + '][type]';
+			var vName = cid
+				? 'spot_extra_course_stages[' + cid + '][stages][' + i + '][value]'
+				: 'spot_extra_stages[' + i + '][value]';
+			tr.innerHTML =
+				'<td style="text-align:center;font-weight:600;color:#646970">' + (i + 1) + '</td>'
+				+ '<td><select name="' + sName + '">'
+				+ '<option value="fixed">مبلغ ثابت (تومان)</option>'
+				+ '<option value="percent">درصد از مجموع سفارش</option>'
+				+ '</select></td>'
+				+ '<td><input type="number" name="' + vName + '" min="0" step="any" placeholder="مثلاً 500000"></td>'
+				+ '<td><button type="button" class="button sp-stage-remove">✕</button></td>';
+			return tr;
+		}
+
+		document.addEventListener('click', function (e) {
+			var btn = e.target.closest('.sp-stage-remove');
+			if (!btn) return;
+			var tbody = btn.closest('tbody');
+			btn.closest('tr').remove();
+			if (tbody) reindex(tbody);
+		});
+
+		document.querySelectorAll('.sp-add-stage-course').forEach(function (addBtn) {
+			addBtn.addEventListener('click', function () {
+				var tbody = addBtn.closest('.sp-course-extra-body').querySelector('tbody.sp-stages-tbody');
+				if (tbody) tbody.appendChild(makeRow(tbody));
+			});
+		});
+
+		var globalAdd   = document.getElementById('sp-add-stage');
+		var globalTbody = document.getElementById('sp-stages-tbody');
+		if (globalAdd && globalTbody) {
+			globalAdd.addEventListener('click', function () {
+				globalTbody.appendChild(makeRow(globalTbody));
+			});
+		}
+	})();
+	</script>
 
 	<h1 style="margin-bottom:12px">📋 درخواست‌های دسترسی اضافه</h1>
 
 	<?php if (!$sms_enabled): ?>
-	<div class="notice notice-warning inline" style="margin-bottom:12px"><p>⚠️ سرویس پیامک فعال نیست — دکمه ارسال پیامک نمایش داده نخواهد شد. <a href="<?= esc_url(admin_url('admin.php?page=spotplayer')) ?>">تنظیمات پیامک</a></p></div>
+	<div class="notice notice-warning inline" style="margin-bottom:12px"><p>⚠️ سرویس پیامک فعال نیست — دکمه ارسال پیامک نمایش داده نخواهد شد. <a href="<?= esc_url(admin_url('admin.php?page=spot-sms-report')) ?>">تنظیمات پیامک</a></p></div>
 	<?php endif; ?>
 
 	<form method="get" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:14px">

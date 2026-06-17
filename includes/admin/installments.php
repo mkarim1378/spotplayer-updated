@@ -355,6 +355,29 @@ function spot_ajax_migration_apply(): void {
 function spot_installments_render(): void {
 	if (!current_user_can('manage_options')) return;
 
+	// ── پردازش فرم تنظیمات اقساط ─────────────────────────────────────────────
+	$inst_settings_notice = '';
+	if (isset($_POST['spot_save_installments']) && check_admin_referer('spot_save_installments', 'spot_installments_nonce')) {
+		$existing = get_option('spot_courses', []);
+		$insts_post = (array)($_POST['spot_courses'] ?? []);
+		foreach ($existing as &$course) {
+			$cid = $course['id'] ?? '';
+			if (!isset($insts_post[$cid])) continue;
+			$insts = [];
+			foreach ((array)($insts_post[$cid]['installments'] ?? []) as $row) {
+				$from   = intval($row['from'] ?? 0);
+				$to_raw = trim(sanitize_text_field($row['to'] ?? ''));
+				$days   = ($row['days'] !== '' && $row['days'] !== null) ? intval($row['days']) : '';
+				if ($to_raw !== '' && !ctype_digit($to_raw)) continue;
+				$insts[] = ['from' => $from, 'to' => ($to_raw === '' ? '' : intval($to_raw)), 'days' => $days];
+			}
+			$course['installments'] = $insts;
+		}
+		unset($course);
+		update_option('spot_courses', $existing);
+		$inst_settings_notice = '<div class="notice notice-success is-dismissible"><p>✅ تنظیمات اقساط دوره‌ها ذخیره شد.</p></div>';
+	}
+
 	$filter   = sanitize_key($_GET['filter'] ?? 'all');
 	$search   = sanitize_text_field($_GET['search'] ?? '');
 	$paged    = max(1, intval($_GET['paged'] ?? 1));
@@ -389,8 +412,112 @@ function spot_installments_render(): void {
 	<style>
 	.sp-inst-page table th, .sp-inst-page table td { text-align:right !important }
 	.sp-inst-badge { display:inline-block; padding:2px 8px; border-radius:3px; font-size:12px; font-weight:600 }
+	/* ── Installment config ── */
+	.sp-inst-table { width:100%; border-collapse:collapse; margin-bottom:8px; }
+	.sp-inst-table th { text-align:right; padding:4px 8px; background:#ececec; font-size:11px; font-weight:600; border-bottom:1px solid #dcdcde; }
+	.sp-inst-table td { padding:3px 6px; border-bottom:1px solid #f0f0f1; vertical-align:middle; }
+	.sp-inst-table td input { width:100%; margin:0; }
+	.sp-inst-remove { color:#c00; border-color:#c00; padding:1px 6px; min-height:0; height:22px; line-height:20px; font-size:11px; }
+	.sp-inst-config-course { border:1px solid #dcdcde; border-radius:4px; margin-bottom:10px; }
+	.sp-inst-config-course > summary { cursor:pointer; padding:10px 14px; background:#f6f7f7; border-radius:4px; list-style:none; display:flex; align-items:center; gap:8px; }
+	.sp-inst-config-course > summary::-webkit-details-marker { display:none; }
+	.sp-inst-config-course > summary::before { content:'▶'; font-size:10px; margin-left:4px; transition:transform .15s; display:inline-block; }
+	.sp-inst-config-course[open] > summary::before { transform:rotate(90deg); }
+	.sp-inst-config-body { padding:14px 16px 18px; }
 	</style>
 	<div class="wrap sp-inst-page">
+
+	<?= $inst_settings_notice ?>
+
+	<!-- ── تنظیمات اقساط دوره‌ها ── -->
+	<details style="border:1px solid #c3c4c7;border-radius:4px;margin-bottom:24px;background:#fff">
+		<summary style="cursor:pointer;padding:14px 20px;background:#f6f7f7;border-radius:4px;list-style:none;display:flex;align-items:center;gap:8px;font-weight:600;font-size:14px">
+			⚙️ تنظیمات اقساط دوره‌ها
+		</summary>
+		<div style="padding:20px 24px">
+			<p style="margin-top:0;color:#646970;font-size:13px">برای هر دوره پله‌های قسطی تعریف کنید. این تنظیمات سرفصل‌های قابل دسترس در هر قسط و مهلت پرداخت قسط بعدی را مشخص می‌کند.</p>
+			<form method="post">
+				<?php wp_nonce_field('spot_save_installments', 'spot_installments_nonce') ?>
+				<input type="hidden" name="spot_save_installments" value="1">
+				<?php
+				$all_inst_courses = get_option('spot_courses', []);
+				if (empty($all_inst_courses)): ?>
+					<div class="notice notice-warning inline"><p>ابتدا دوره‌ها را در تنظیمات > دوره‌ها تعریف کنید.</p></div>
+				<?php else:
+					foreach ($all_inst_courses as $ic):
+						$ic_id    = $ic['id']   ?? '';
+						$ic_name  = $ic['name'] ?? $ic_id;
+						$ic_insts = $ic['installments'] ?? [];
+						$ic_count = count($ic_insts);
+				?>
+				<details class="sp-inst-config-course" <?= $ic_count ? 'open' : '' ?>>
+					<summary>
+						<strong><?= esc_html($ic_name) ?></strong>
+						<small style="color:#646970;font-family:monospace;font-size:11px"><?= esc_html($ic_id) ?></small>
+						<span style="color:<?= $ic_count ? '#2a7a2a' : '#999' ?>;font-size:11px;font-weight:600">
+							<?= $ic_count ? $ic_count . ' قسط' : 'بدون اقساط' ?>
+						</span>
+					</summary>
+					<div class="sp-inst-config-body">
+						<table class="sp-inst-table">
+							<thead><tr>
+								<th style="width:20%">سرفصل از</th>
+								<th style="width:25%">تا (خالی = دسترسی کامل)</th>
+								<th style="width:35%">روز تا سررسید قسط بعدی</th>
+								<th style="width:20%"></th>
+							</tr></thead>
+							<tbody class="sp-inst-config-tbody" data-cid="<?= esc_attr($ic_id) ?>">
+							<?php foreach ($ic_insts as $ii => $inst): ?>
+								<tr>
+									<td><input type="number" name="spot_courses[<?= esc_attr($ic_id) ?>][installments][<?= $ii ?>][from]" value="<?= esc_attr($inst['from'] ?? 0) ?>" min="0" placeholder="0"></td>
+									<td><input type="text"   name="spot_courses[<?= esc_attr($ic_id) ?>][installments][<?= $ii ?>][to]"   value="<?= esc_attr($inst['to'] ?? '') ?>" placeholder="مثلاً 4 — یا خالی"></td>
+									<td><input type="number" name="spot_courses[<?= esc_attr($ic_id) ?>][installments][<?= $ii ?>][days]" value="<?= esc_attr($inst['days'] ?? '') ?>" min="0" placeholder="مثلاً 30 — آخرین قسط خالی"></td>
+									<td><button type="button" class="button sp-inst-remove">✕</button></td>
+								</tr>
+							<?php endforeach; ?>
+							</tbody>
+						</table>
+						<button type="button" class="button sp-add-inst-row" data-cid="<?= esc_attr($ic_id) ?>">+ افزودن قسط</button>
+					</div>
+				</details>
+				<?php endforeach; endif; ?>
+				<p style="margin-top:20px">
+					<?php submit_button('ذخیره تنظیمات اقساط', 'primary', 'spot_inst_settings_submit', false) ?>
+				</p>
+			</form>
+		</div>
+	</details>
+
+	<script>
+	(function () {
+		function makeInstRow(cid, iidx) {
+			var tr = document.createElement('tr');
+			tr.innerHTML =
+				'<td><input type="number" name="spot_courses[' + cid + '][installments][' + iidx + '][from]" min="0" placeholder="0"></td>'
+				+ '<td><input type="text"   name="spot_courses[' + cid + '][installments][' + iidx + '][to]"   placeholder="مثلاً 4 — یا خالی"></td>'
+				+ '<td><input type="number" name="spot_courses[' + cid + '][installments][' + iidx + '][days]" min="0" placeholder="مثلاً 30 — آخرین قسط خالی"></td>'
+				+ '<td><button type="button" class="button sp-inst-remove">✕</button></td>';
+			return tr;
+		}
+
+		document.addEventListener('click', function (e) {
+			var removeBtn = e.target.closest('.sp-inst-remove');
+			if (removeBtn) {
+				removeBtn.closest('tr').remove();
+				return;
+			}
+			var addBtn = e.target.closest('.sp-add-inst-row');
+			if (addBtn) {
+				var cid   = addBtn.dataset.cid;
+				var tbody = addBtn.closest('.sp-inst-config-body').querySelector('tbody.sp-inst-config-tbody');
+				if (tbody) {
+					var iidx = tbody.querySelectorAll('tr').length;
+					tbody.appendChild(makeInstRow(cid, iidx));
+				}
+			}
+		});
+	})();
+	</script>
 
 	<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
 		<h1 style="margin:0">📋 مدیریت اقساط</h1>
@@ -402,7 +529,7 @@ function spot_installments_render(): void {
 	</div>
 
 	<?php if (!spot_sms_is_enabled()): ?>
-	<div class="notice notice-warning inline" style="margin-bottom:12px"><p>⚠️ سرویس پیامک فعال نیست — دکمه ارسال یادآور نمایش داده نخواهد شد. <a href="<?= esc_url(admin_url('admin.php?page=spotplayer')) ?>">تنظیمات پیامک</a></p></div>
+	<div class="notice notice-warning inline" style="margin-bottom:12px"><p>⚠️ سرویس پیامک فعال نیست — دکمه ارسال یادآور نمایش داده نخواهد شد. <a href="<?= esc_url(admin_url('admin.php?page=spot-sms-report')) ?>">تنظیمات پیامک</a></p></div>
 	<?php endif; ?>
 
 	<ul class="subsubsub" style="margin-bottom:8px">

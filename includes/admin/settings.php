@@ -25,20 +25,18 @@ function spot_admin_page() {
 	// ── پردازش فرم دوره‌ها ────────────────────────────────────────────────────
 	$courses_notice = '';
 	if (isset($_POST['spot_save_courses']) && check_admin_referer('spot_save_courses', 'spot_courses_nonce')) {
+		$existing_courses = get_option('spot_courses', []);
+		$existing_insts = [];
+		foreach ($existing_courses as $c) {
+			if (!empty($c['id'])) $existing_insts[$c['id']] = $c['installments'] ?? [];
+		}
+
 		$courses = [];
 		foreach ((array)($_POST['spot_courses'] ?? []) as $row) {
 			$id   = sanitize_text_field($row['id']   ?? '');
 			$name = sanitize_text_field($row['name'] ?? '');
 			if (!preg_match('/^[0-9a-f]{24}$/i', $id) || $name === '') continue;
-			$installments = [];
-			foreach ((array)($row['installments'] ?? []) as $inst) {
-				$from   = max(0, intval($inst['from'] ?? 0));
-				$to_raw = trim(sanitize_text_field($inst['to'] ?? ''));
-				$days   = max(0, intval($inst['days'] ?? 0));
-				if ($to_raw !== '' && !ctype_digit($to_raw)) continue;
-				$installments[] = ['from' => $from, 'to' => ($to_raw === '' ? '' : intval($to_raw)), 'days' => $days];
-			}
-			$courses[] = ['id' => $id, 'name' => $name, 'installments' => $installments];
+			$courses[] = ['id' => $id, 'name' => $name, 'installments' => $existing_insts[$id] ?? []];
 		}
 		update_option('spot_courses', $courses);
 		$courses_notice = '<div class="notice notice-success"><p>✅ لیست دوره‌های اسپات پلیر ذخیره شد.</p></div>';
@@ -118,48 +116,6 @@ function spot_admin_page() {
 		$force_tab = 'bulk';
 	}
 
-	// ── پردازش فرم دسترسی اضافه ─────────────────────────────────────────────
-	$extra_notice = '';
-	if (isset($_POST['spot_save_extra']) && check_admin_referer('spot_save_extra', 'spot_extra_nonce')) {
-		// Global fallback stages
-		$stages = [];
-		foreach ((array)($_POST['spot_extra_stages'] ?? []) as $row) {
-			$type  = sanitize_key($row['type'] ?? '');
-			$value = floatval($row['value'] ?? 0);
-			if (!in_array($type, ['fixed', 'percent'], true) || $value <= 0) continue;
-			$stages[] = ['type' => $type, 'value' => $value];
-		}
-		$end_mode = sanitize_key($_POST['spot_extra_end_mode'] ?? 'max');
-		if (!in_array($end_mode, ['max', 'repeat_last'], true)) $end_mode = 'max';
-
-		// Per-course stages
-		$course_stages = [];
-		foreach ((array)($_POST['spot_extra_course_stages'] ?? []) as $raw_cid => $data) {
-			$cid = sanitize_text_field($raw_cid);
-			if (empty($cid)) continue;
-			$cstages = [];
-			foreach ((array)($data['stages'] ?? []) as $row) {
-				$type  = sanitize_key($row['type'] ?? '');
-				$value = floatval($row['value'] ?? 0);
-				if (!in_array($type, ['fixed', 'percent'], true) || $value <= 0) continue;
-				$cstages[] = ['type' => $type, 'value' => $value];
-			}
-			$cmode = sanitize_key($data['end_mode'] ?? 'max');
-			if (!in_array($cmode, ['max', 'repeat_last'], true)) $cmode = 'max';
-			$course_stages[$cid] = ['stages' => $cstages, 'end_mode' => $cmode];
-		}
-
-		$sp_opt = get_option('spotplayer', []);
-		$sp_opt['extra_stages']        = $stages;
-		$sp_opt['extra_end_mode']      = $end_mode;
-		$sp_opt['extra_course_stages'] = $course_stages;
-		update_option('spotplayer', $sp_opt);
-		$sp = $sp_opt;
-
-		$extra_notice = '<div class="notice notice-success"><p>✅ تنظیمات دسترسی اضافه ذخیره شد.</p></div>';
-		$force_tab = 'extra';
-	}
-
 	$saved_courses = get_option('spot_courses', []);
 	?>
 
@@ -184,33 +140,6 @@ function spot_admin_page() {
 	.sp-courses-table .sp-id-col input { font-family:monospace; direction:ltr; font-size:12px; }
 	.sp-courses-table .spot-remove-row { color:#c00; border-color:#c00; padding:2px 8px; min-height:0; height:26px; line-height:24px; }
 	.sp-td-actions { display:flex; gap:4px; align-items:center; justify-content:flex-end; }
-	.sp-inst-toggle { color:#2271b1; border-color:#2271b1; padding:2px 8px; min-height:0; height:26px; line-height:24px; font-size:11px; white-space:nowrap; }
-	.sp-inst-toggle.open { background:#2271b1; color:#fff; }
-	.sp-inst-wrap { background:#f6f7f7; border-top:2px solid #2271b1; padding:10px 12px; }
-	.sp-inst-table { width:100%; border-collapse:collapse; margin-bottom:8px; }
-	.sp-inst-table th { text-align:right; padding:4px 8px; background:#ececec; font-size:11px; font-weight:600; border-bottom:1px solid #dcdcde; }
-	.sp-inst-table td { padding:3px 6px; border-bottom:1px solid #f0f0f1; vertical-align:middle; }
-	.sp-inst-table td input { width:100%; margin:0; }
-	.sp-inst-remove { color:#c00; border-color:#c00; padding:1px 6px; min-height:0; height:22px; line-height:20px; font-size:11px; }
-	.sp-sms-counter { font-size:12px; color:#646970; margin-top:4px; }
-	.sp-sms-template { direction:rtl !important; font-family:inherit !important; }
-	/* ── Stages table (extra access) ── */
-	.sp-stages-table { width:100%; border-collapse:collapse; margin-bottom:12px; max-width:560px; }
-	.sp-stages-table th { text-align:right; padding:6px 8px; background:#f6f7f7; border-bottom:1px solid #dcdcde; font-size:12px; font-weight:600; }
-	.sp-stages-table td { padding:5px 8px; border-bottom:1px solid #f0f0f1; vertical-align:middle; }
-	.sp-stages-table td select, .sp-stages-table td input[type=number] { width:100%; margin:0; }
-	.sp-stage-remove { color:#c00; border-color:#c00; padding:2px 8px; min-height:0; height:26px; line-height:24px; }
-	.sp-end-mode-opt { display:flex; align-items:flex-start; gap:10px; padding:10px 14px; border-radius:3px; background:#f9f9f9; border:1px solid #f0f0f1; margin-bottom:8px; cursor:pointer; }
-	.sp-end-mode-opt:last-child { margin-bottom:0; }
-	.sp-end-mode-opt input[type=radio] { margin-top:3px; flex-shrink:0; }
-	/* ── Per-course accordion ── */
-	.sp-course-extra { border:1px solid #dcdcde; border-radius:4px; margin-bottom:10px; }
-	.sp-course-extra > summary { cursor:pointer; padding:10px 14px; background:#f6f7f7; border-radius:4px; list-style:none; display:flex; align-items:center; gap:8px; }
-	.sp-course-extra > summary::-webkit-details-marker { display:none; }
-	.sp-course-extra > summary::before { content:'▶'; font-size:10px; margin-left:4px; transition:transform .15s; display:inline-block; }
-	.sp-course-extra[open] > summary::before { transform:rotate(90deg); }
-	.sp-course-extra-body { padding:14px 16px 18px; }
-	.sp-extra-fallback { border-style:dashed; margin-top:16px; }
 	/* ── Tabs ── */
 	.sp-tabs-nav { display:flex; border-bottom:2px solid #c3c4c7; margin-bottom:24px; gap:0; }
 	.sp-tab-btn { padding:9px 20px; border:1px solid transparent; border-bottom:none; background:none; cursor:pointer; font-size:13px; border-radius:4px 4px 0 0; margin-bottom:-2px; color:#646970; font-family:inherit; }
@@ -235,13 +164,11 @@ function spot_admin_page() {
 
 	<nav class="sp-tabs-nav">
 		<button type="button" class="sp-tab-btn" data-tab="general">⚙️ تنظیمات اصلی</button>
-		<button type="button" class="sp-tab-btn" data-tab="sms">📲 پیامک</button>
 		<button type="button" class="sp-tab-btn" data-tab="courses">📚 دوره‌ها</button>
 		<button type="button" class="sp-tab-btn" data-tab="bulk">📦 عملیات دسته‌ای</button>
-		<button type="button" class="sp-tab-btn" data-tab="extra">💳 دسترسی اضافه</button>
 	</nav>
 
-	<!-- ═══════════ فرم اصلی: تب‌های ۱ و ۲ ═══════════ -->
+	<!-- ═══════════ فرم اصلی: تب ۱ ═══════════ -->
 	<form id="sp-main-form" action="options.php" method="post">
 	<?php settings_fields('spotplayer') ?>
 
@@ -334,111 +261,9 @@ function spot_admin_page() {
 
 	</div><!-- /sp-tab-general -->
 
-	<!-- ── تب ۲: پیامک ── -->
-	<div class="sp-tab-panel" id="sp-tab-sms">
-
-		<div class="sp-card">
-			<h2>📲 ارسال پیامک</h2>
-			<div class="sp-check">
-				<input type="checkbox" id="sp-sms-enabled" name="spotplayer[sms_enabled]" value="1" <?= !empty($sp['sms_enabled']) ? 'checked' : '' ?>>
-				<div>
-					<label class="sp-check-label" for="sp-sms-enabled">ارسال خودکار پیامک پس از صدور لایسنس</label>
-					<div class="sp-check-desc">پس از ایجاد موفق لایسنس، دو پیامک به شماره مشتری ارسال می‌شود: ابتدا متن توضیحات، سپس کد لایسنس به تنهایی.</div>
-				</div>
-			</div>
-			<div class="sp-field" style="margin-top:12px">
-				<label>نام کاربری پیامیتو</label>
-				<input type="text" name="spotplayer[sms_username]" value="<?= esc_attr(@$sp['sms_username']) ?>" autocomplete="off">
-			</div>
-			<div class="sp-field">
-				<label>کلید API وب‌سرویس پیامیتو</label>
-				<input type="text" name="spotplayer[sms_password]" value="<?= esc_attr(@$sp['sms_password']) ?>" style="direction:ltr" autocomplete="off">
-				<p class="description" style="margin-top:4px">از منوی <b>توسعه‌دهندگان</b> در پنل پیامیتو — رمز ورود معمولی حساب شما نیست.</p>
-			</div>
-			<div class="sp-field">
-				<label>شماره فرستنده اصلی</label>
-				<input type="text" name="spotplayer[sms_from]" value="<?= esc_attr(@$sp['sms_from']) ?>" style="direction:ltr" placeholder="10004...">
-			</div>
-			<div class="sp-field">
-				<label>شماره بکاپ ۱ <span style="font-weight:normal;color:#646970">(اختیاری)</span></label>
-				<input type="text" name="spotplayer[sms_from1]" value="<?= esc_attr(@$sp['sms_from1']) ?>" style="direction:ltr">
-			</div>
-			<div class="sp-field">
-				<label>شماره بکاپ ۲ <span style="font-weight:normal;color:#646970">(اختیاری)</span></label>
-				<input type="text" name="spotplayer[sms_from2]" value="<?= esc_attr(@$sp['sms_from2']) ?>" style="direction:ltr">
-			</div>
-			<div class="sp-field">
-				<label>متن پیامک توضیحات</label>
-				<textarea id="sp-sms-template" name="spotplayer[sms_template]" class="sp-sms-template" style="height:100px"><?= esc_textarea(@$sp['sms_template']) ?></textarea>
-				<div id="sp-sms-counter" class="sp-sms-counter"></div>
-				<p class="description" style="margin-top:6px">
-					متغیرها: <code>{customer_name}</code> <code>{order_id}</code> <code>{course_names}</code> <code>{site_name}</code> <code>{site_url}</code><br>
-					<span class="sp-warn">⚠ استفاده از <code>{site_url}</code> ممکن است باعث خطای «حاوی لینک» از پیامیتو شود.</span><br>
-					<span class="sp-warn">⚠ پیامک دوم به‌صورت خودکار فقط کد لایسنس ارسال می‌شود. <code>{license_key}</code> در این متن جایگزین نخواهد شد.</span>
-				</p>
-			</div>
-			<div class="sp-field">
-				<label>متن پیامک قسط میانی <span style="font-weight:normal;color:#646970">(پس از پرداخت قسط ۲، ۳، ... — بدون ارسال کد لایسنس)</span></label>
-				<textarea name="spotplayer[sms_template_installment_mid]" class="sp-sms-template" style="height:100px"><?= esc_textarea(@$sp['sms_template_installment_mid']) ?></textarea>
-				<p class="description" style="margin-top:6px">
-					متغیرها: <code>{customer_name}</code> <code>{course_names}</code> <code>{installment_number}</code> <code>{total_installments}</code> <code>{order_id}</code>
-				</p>
-			</div>
-			<div class="sp-field">
-				<label>متن پیامک قسط آخر <span style="font-weight:normal;color:#646970">(پس از پرداخت آخرین قسط)</span></label>
-				<textarea name="spotplayer[sms_template_installment_final]" class="sp-sms-template" style="height:100px"><?= esc_textarea(@$sp['sms_template_installment_final']) ?></textarea>
-				<p class="description" style="margin-top:6px">
-					متغیرها: <code>{customer_name}</code> <code>{course_names}</code> <code>{total_installments}</code> <code>{order_id}</code>
-				</p>
-			</div>
-			<div class="sp-field">
-				<label>متن پیامک یادآور سررسید <span style="font-weight:normal;color:#646970">(ارسال دستی از داشبورد اقساط)</span></label>
-				<textarea name="spotplayer[sms_template_reminder]" class="sp-sms-template" style="height:100px"><?= esc_textarea(@$sp['sms_template_reminder']) ?></textarea>
-				<p class="description" style="margin-top:6px">
-					متغیرها: <code>{customer_name}</code> <code>{course_names}</code> <code>{next_installment_number}</code> <code>{total_installments}</code> <code>{due_date}</code> <code>{order_id}</code>
-				</p>
-			</div>
-			<hr style="margin:20px 0 16px;border:none;border-top:1px solid #f0f0f1">
-			<p style="font-weight:600;font-size:13px;margin:0 0 12px;color:#1d2327">💳 پیامک دسترسی اضافه لایسنس</p>
-			<div class="sp-field">
-				<label>متن پیامک دسترسی اضافه <span style="font-weight:normal;color:#646970">(ارسال خودکار پس از پرداخت موفق)</span></label>
-				<textarea name="spotplayer[sms_template_extra]" class="sp-sms-template" style="height:100px"><?= esc_textarea(@$sp['sms_template_extra']) ?></textarea>
-				<p class="description" style="margin-top:6px">
-					متغیرها: <code>{customer_name}</code> <code>{course_names}</code> <code>{order_id}</code> <code>{site_name}</code><br>
-					<span class="sp-warn">⚠ پیامک دوم به‌صورت خودکار فقط کد لایسنس ارسال می‌شود.</span>
-				</p>
-			</div>
-
-			<hr style="margin:20px 0 16px;border:none;border-top:1px solid #f0f0f1">
-			<p style="font-weight:600;font-size:13px;margin:0 0 12px;color:#1d2327">📊 گزارش روزانه درخواست‌های دسترسی اضافه</p>
-			<div class="sp-field">
-				<label>شماره موبایل ادمین برای گزارش روزانه</label>
-				<input type="text" name="spotplayer[extra_admin_phone]" value="<?= esc_attr(@$sp['extra_admin_phone']) ?>" placeholder="09XXXXXXXXX" style="direction:ltr;max-width:200px">
-				<p class="description" style="margin-top:4px">اگر در ۲۴ ساعت گذشته درخواستی ثبت شده باشد، در ساعت تعیین‌شده یک پیامک خلاصه ارسال می‌شود. اگر درخواستی نبود، پیامکی ارسال نمی‌شود.</p>
-			</div>
-			<div class="sp-field">
-				<label>ساعت ارسال گزارش روزانه</label>
-				<input type="time" name="spotplayer[extra_report_time]" value="<?= esc_attr(@$sp['extra_report_time'] ?: '08:00') ?>" style="direction:ltr;max-width:120px">
-				<p class="description" style="margin-top:4px">بر اساس تایم‌زون سایت. برای دقت ساعت، Action Scheduler باید نصب باشد.</p>
-			</div>
-
-			<hr style="margin:20px 0 16px;border:none;border-top:1px solid #f0f0f1">
-			<div class="sp-field">
-				<label>ارسال پیامک آزمایشی</label>
-				<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-					<input type="text" id="sp-sms-test-phone" placeholder="09XXXXXXXXX" style="width:160px;direction:ltr;max-width:160px">
-					<button type="button" id="sp-sms-test-btn" class="button">ارسال آزمایشی</button>
-					<span id="sp-sms-test-result" style="font-size:13px"></span>
-				</div>
-				<p class="description" style="margin-top:4px">با مقادیر فعلی فرم تست می‌کند — نیازی به ذخیره قبلی ندارد.</p>
-			</div>
-		</div>
-
-	</div><!-- /sp-tab-sms -->
-
 	</form><!-- /sp-main-form -->
 
-	<!-- ═══════════ تب ۳: دوره‌ها ═══════════ -->
+	<!-- ═══════════ تب ۲: دوره‌ها ═══════════ -->
 	<div class="sp-tab-panel" id="sp-tab-courses">
 
 		<?= $courses_notice ?>
@@ -455,46 +280,18 @@ function spot_admin_page() {
 				<input type="hidden" name="spot_save_courses" value="1">
 				<table class="sp-courses-table">
 					<thead><tr>
-						<th style="width:40%">نام دوره</th>
-						<th class="sp-id-col" style="width:42%">شناسه دوره (۲۴ کاراکتر هگز از پنل اسپات)</th>
-						<th style="width:18%"></th>
+						<th style="width:45%">نام دوره</th>
+						<th class="sp-id-col" style="width:45%">شناسه دوره (۲۴ کاراکتر هگز از پنل اسپات)</th>
+						<th style="width:10%"></th>
 					</tr></thead>
 					<tbody id="spot-courses-tbody">
-					<?php foreach ($saved_courses as $idx => $course) {
-						$insts = $course['installments'] ?? [];
-						$inst_count = count($insts); ?>
+					<?php foreach ($saved_courses as $idx => $course) { ?>
 						<tr class="sp-course-row" data-idx="<?= $idx ?>">
 							<td><input type="text" name="spot_courses[<?= $idx ?>][name]" value="<?= esc_attr($course['name']) ?>" placeholder="مثلاً: دوره پایتون" required></td>
 							<td class="sp-id-col"><input type="text" name="spot_courses[<?= $idx ?>][id]" value="<?= esc_attr($course['id']) ?>" placeholder="5d2ee35bcddc092a304ae5eb" pattern="[0-9a-fA-F]{24}" required></td>
 							<td>
 								<div class="sp-td-actions">
-									<button type="button" class="button sp-inst-toggle<?= $inst_count ? ' open' : '' ?>">📋 اقساط<?= $inst_count ? ' (' . $inst_count . ')' : '' ?></button>
 									<button type="button" class="button spot-remove-row">✕</button>
-								</div>
-							</td>
-						</tr>
-						<tr class="sp-inst-wrap-row"<?= $inst_count ? '' : ' style="display:none"' ?>>
-							<td colspan="3" style="padding:0 0 6px">
-								<div class="sp-inst-wrap">
-									<table class="sp-inst-table">
-										<thead><tr>
-											<th style="width:22%">سرفصل از</th>
-											<th style="width:28%">تا (خالی = دسترسی کامل)</th>
-											<th style="width:35%">روز تا سررسید قسط بعدی</th>
-											<th style="width:15%"></th>
-										</tr></thead>
-										<tbody class="sp-inst-tbody">
-										<?php foreach ($insts as $iidx => $inst) { ?>
-											<tr>
-												<td><input type="number" name="spot_courses[<?= $idx ?>][installments][<?= $iidx ?>][from]" value="<?= esc_attr($inst['from']) ?>" min="0" placeholder="0"></td>
-												<td><input type="text" name="spot_courses[<?= $idx ?>][installments][<?= $iidx ?>][to]" value="<?= esc_attr($inst['to']) ?>" placeholder="مثلاً 4 — یا خالی"></td>
-												<td><input type="number" name="spot_courses[<?= $idx ?>][installments][<?= $iidx ?>][days]" value="<?= esc_attr($inst['days'] ?? '') ?>" min="0" placeholder="مثلاً 30 — آخرین قسط خالی"></td>
-												<td><button type="button" class="button sp-inst-remove">✕</button></td>
-											</tr>
-										<?php } ?>
-										</tbody>
-									</table>
-									<button type="button" class="button sp-add-inst">+ افزودن قسط</button>
 								</div>
 							</td>
 						</tr>
@@ -509,7 +306,7 @@ function spot_admin_page() {
 
 	</div><!-- /sp-tab-courses -->
 
-	<!-- ═══════════ تب ۴: عملیات دسته‌ای ═══════════ -->
+	<!-- ═══════════ تب ۳: عملیات دسته‌ای ═══════════ -->
 	<div class="sp-tab-panel" id="sp-tab-bulk">
 
 		<?= $bulk_create_notice ?>
@@ -615,136 +412,6 @@ function spot_admin_page() {
 
 	</div><!-- /sp-tab-bulk -->
 
-	<!-- ═══════════ تب ۵: دسترسی اضافه ═══════════ -->
-	<div class="sp-tab-panel" id="sp-tab-extra">
-
-		<?= $extra_notice ?>
-
-		<div class="sp-card">
-			<h2>💳 هزینه دسترسی اضافه لایسنس — به ازای هر دوره</h2>
-			<p style="margin-top:0;color:#646970;font-size:13px">برای هر دوره پله‌های قیمت جداگانه تعریف کنید. اگر دوره‌ای پله‌ای نداشته باشد، از بخش «پیش‌فرض» در انتها استفاده می‌شود.</p>
-
-			<form method="post">
-				<?php wp_nonce_field('spot_save_extra', 'spot_extra_nonce') ?>
-				<input type="hidden" name="spot_save_extra" value="1">
-
-				<?php
-				$all_courses   = get_option('spot_courses', []);
-				$course_stages = $sp['extra_course_stages'] ?? [];
-
-				if (empty($all_courses)): ?>
-					<div class="notice notice-warning inline"><p>ابتدا دوره‌ها را در تب «دوره‌ها» تعریف کنید.</p></div>
-				<?php else:
-					foreach ($all_courses as $course):
-						$cid    = $course['id']   ?? '';
-						$cname  = $course['name'] ?? $cid;
-						$cdata  = $course_stages[$cid] ?? [];
-						$cstages = $cdata['stages']   ?? [];
-						$cmode   = $cdata['end_mode'] ?? 'max';
-						$has_stages = !empty($cstages);
-				?>
-				<details class="sp-course-extra" <?= $has_stages ? 'open' : '' ?>>
-					<summary>
-						<strong><?= esc_html($cname) ?></strong>
-						<small style="color:#646970;font-family:monospace;font-size:11px"><?= esc_html($cid) ?></small>
-						<?php if ($has_stages): ?>
-							<span style="color:#2a7a2a;font-size:11px;font-weight:600"><?= count($cstages) ?> پله</span>
-						<?php else: ?>
-							<span style="color:#999;font-size:11px">بدون پله — از پیش‌فرض استفاده می‌شود</span>
-						<?php endif; ?>
-					</summary>
-					<div class="sp-course-extra-body">
-						<table class="sp-stages-table">
-							<thead><tr>
-								<th style="width:12%">پله</th>
-								<th style="width:40%">نوع</th>
-								<th style="width:33%">مقدار</th>
-								<th style="width:15%"></th>
-							</tr></thead>
-							<tbody class="sp-stages-tbody" data-cid="<?= esc_attr($cid) ?>">
-							<?php foreach ($cstages as $si => $stage): ?>
-								<tr>
-									<td style="text-align:center;font-weight:600;color:#646970"><?= $si + 1 ?></td>
-									<td>
-										<select name="spot_extra_course_stages[<?= esc_attr($cid) ?>][stages][<?= $si ?>][type]">
-											<option value="fixed"   <?= ($stage['type'] ?? '') === 'fixed'   ? 'selected' : '' ?>>مبلغ ثابت (تومان)</option>
-											<option value="percent" <?= ($stage['type'] ?? '') === 'percent' ? 'selected' : '' ?>>درصد از مجموع سفارش</option>
-										</select>
-									</td>
-									<td><input type="number" name="spot_extra_course_stages[<?= esc_attr($cid) ?>][stages][<?= $si ?>][value]" value="<?= esc_attr($stage['value'] ?? '') ?>" min="0" step="any" placeholder="مثلاً 500000"></td>
-									<td><button type="button" class="button sp-stage-remove">✕</button></td>
-								</tr>
-							<?php endforeach; ?>
-							</tbody>
-						</table>
-						<button type="button" class="button sp-add-stage-course">+ افزودن پله</button>
-
-						<hr style="margin:14px 0;border:none;border-top:1px solid #f0f0f1">
-						<p style="font-weight:600;margin:0 0 8px;font-size:13px">رفتار بعد از آخرین پله</p>
-						<label class="sp-end-mode-opt">
-							<input type="radio" name="spot_extra_course_stages[<?= esc_attr($cid) ?>][end_mode]" value="max" <?= $cmode === 'max' ? 'checked' : '' ?>>
-							<div><span style="font-weight:600;display:block;margin-bottom:2px">حداکثر N بار</span><span style="color:#646970;font-size:12px">بعد از آخرین پله، ثبت درخواست جدید ممکن نخواهد بود.</span></div>
-						</label>
-						<label class="sp-end-mode-opt">
-							<input type="radio" name="spot_extra_course_stages[<?= esc_attr($cid) ?>][end_mode]" value="repeat_last" <?= $cmode === 'repeat_last' ? 'checked' : '' ?>>
-							<div><span style="font-weight:600;display:block;margin-bottom:2px">تکرار قیمت پله آخر</span><span style="color:#646970;font-size:12px">از پله آخر به بعد همان مبلغ اعمال می‌شود.</span></div>
-						</label>
-					</div>
-				</details>
-				<?php endforeach; endif; ?>
-
-				<!-- ── پیش‌فرض (fallback) ── -->
-				<details class="sp-course-extra sp-extra-fallback">
-					<summary>
-						<strong>پیش‌فرض</strong>
-						<small style="color:#646970;font-size:11px">برای سفارش‌هایی که دوره‌شان پله تعریف‌شده ندارد</small>
-					</summary>
-					<div class="sp-course-extra-body">
-						<table class="sp-stages-table">
-							<thead><tr>
-								<th style="width:12%">پله</th><th style="width:40%">نوع</th><th style="width:33%">مقدار</th><th style="width:15%"></th>
-							</tr></thead>
-							<tbody id="sp-stages-tbody">
-							<?php
-							$saved_stages = $sp['extra_stages'] ?? [];
-							foreach ($saved_stages as $si => $stage): ?>
-								<tr>
-									<td style="text-align:center;font-weight:600;color:#646970"><?= $si + 1 ?></td>
-									<td>
-										<select name="spot_extra_stages[<?= $si ?>][type]">
-											<option value="fixed"   <?= ($stage['type'] ?? '') === 'fixed'   ? 'selected' : '' ?>>مبلغ ثابت (تومان)</option>
-											<option value="percent" <?= ($stage['type'] ?? '') === 'percent' ? 'selected' : '' ?>>درصد از مجموع سفارش</option>
-										</select>
-									</td>
-									<td><input type="number" name="spot_extra_stages[<?= $si ?>][value]" value="<?= esc_attr($stage['value'] ?? '') ?>" min="0" step="any" placeholder="مثلاً 500000"></td>
-									<td><button type="button" class="button sp-stage-remove">✕</button></td>
-								</tr>
-							<?php endforeach; ?>
-							</tbody>
-						</table>
-						<button type="button" id="sp-add-stage" class="button">+ افزودن پله</button>
-						<hr style="margin:14px 0;border:none;border-top:1px solid #f0f0f1">
-						<p style="font-weight:600;margin:0 0 8px;font-size:13px">رفتار بعد از آخرین پله</p>
-						<?php $end_mode = $sp['extra_end_mode'] ?? 'max'; ?>
-						<label class="sp-end-mode-opt">
-							<input type="radio" name="spot_extra_end_mode" value="max" <?= $end_mode === 'max' ? 'checked' : '' ?>>
-							<div><span style="font-weight:600;display:block;margin-bottom:2px">حداکثر N بار</span><span style="color:#646970;font-size:12px">بعد از آخرین پله، ثبت درخواست جدید ممکن نخواهد بود.</span></div>
-						</label>
-						<label class="sp-end-mode-opt">
-							<input type="radio" name="spot_extra_end_mode" value="repeat_last" <?= $end_mode === 'repeat_last' ? 'checked' : '' ?>>
-							<div><span style="font-weight:600;display:block;margin-bottom:2px">تکرار قیمت پله آخر</span><span style="color:#646970;font-size:12px">از پله آخر به بعد همان مبلغ اعمال می‌شود.</span></div>
-						</label>
-					</div>
-				</details>
-
-				<p style="margin-top:20px">
-					<?php submit_button('ذخیره تنظیمات دسترسی اضافه', 'primary', 'spot_extra_submit', false) ?>
-				</p>
-			</form>
-		</div>
-
-	</div><!-- /sp-tab-extra -->
-
 	</div><!-- /sp-settings -->
 
 	<script>
@@ -756,7 +423,7 @@ function spot_admin_page() {
 
 		var globalSaveBtn = document.getElementById('sp-global-save-btn');
 		// Tabs that have their own save button — top button should be hidden there
-		var tabsWithOwnSave = ['courses', 'bulk', 'extra'];
+		var tabsWithOwnSave = ['courses', 'bulk'];
 
 		function activate(id) {
 			btns.forEach(function (b) { b.classList.toggle('sp-tab-active', b.dataset.tab === id); });
@@ -773,7 +440,9 @@ function spot_admin_page() {
 
 		var initial = <?= $force_tab ? json_encode($force_tab) : 'null' ?>;
 		if (!initial) { try { initial = localStorage.getItem('sp_active_tab'); } catch (e) {} }
-		activate(initial && document.getElementById('sp-tab-' + initial) ? initial : 'general');
+		// If the stored/forced tab no longer exists (e.g. sms/extra removed), fall back to general
+		if (!initial || !document.getElementById('sp-tab-' + initial)) initial = 'general';
+		activate(initial);
 
 		// ── تست API ──────────────────────────────────────────────────────────
 		var apiBtn = document.getElementById('spot-test-api-btn');
@@ -801,60 +470,11 @@ function spot_admin_page() {
 		var courseTbody  = document.getElementById('spot-courses-tbody');
 		var courseCounter = <?= count($saved_courses) ?>;
 
-		function makeInstRow(cidx, iidx) {
-			var tr = document.createElement('tr');
-			tr.innerHTML =
-				'<td><input type="number" name="spot_courses[' + cidx + '][installments][' + iidx + '][from]" min="0" placeholder="0"></td>'
-				+ '<td><input type="text" name="spot_courses[' + cidx + '][installments][' + iidx + '][to]" placeholder="مثلاً 4 — یا خالی"></td>'
-				+ '<td><input type="number" name="spot_courses[' + cidx + '][installments][' + iidx + '][days]" min="0" placeholder="مثلاً 30 — آخرین قسط خالی"></td>'
-				+ '<td><button type="button" class="button sp-inst-remove">✕</button></td>';
-			bindInstRemove(tr.querySelector('.sp-inst-remove'));
-			return tr;
-		}
-
-		function updateToggleLabel(courseRow) {
-			var wrapRow = courseRow.nextElementSibling;
-			var count   = wrapRow ? wrapRow.querySelectorAll('.sp-inst-tbody tr').length : 0;
-			var btn     = courseRow.querySelector('.sp-inst-toggle');
-			btn.textContent = '📋 اقساط' + (count > 0 ? ' (' + count + ')' : '');
-			btn.classList.toggle('open', count > 0);
-		}
-
-		function bindInstRemove(btn) {
+		courseTbody.querySelectorAll('.spot-remove-row').forEach(function (btn) {
 			btn.addEventListener('click', function () {
-				var wrapRow = btn.closest('.sp-inst-wrap-row');
 				btn.closest('tr').remove();
-				updateToggleLabel(wrapRow.previousElementSibling);
 			});
-		}
-
-		function bindCourseRow(courseRow) {
-			var wrapRow  = courseRow.nextElementSibling;
-			var instTbody = wrapRow.querySelector('.sp-inst-tbody');
-
-			courseRow.querySelector('.spot-remove-row').addEventListener('click', function () {
-				wrapRow.remove();
-				courseRow.remove();
-			});
-
-			courseRow.querySelector('.sp-inst-toggle').addEventListener('click', function () {
-				var open = wrapRow.style.display !== 'none';
-				wrapRow.style.display = open ? 'none' : '';
-				this.classList.toggle('open', !open);
-			});
-
-			wrapRow.querySelector('.sp-add-inst').addEventListener('click', function () {
-				var cidx = courseRow.dataset.idx;
-				var iidx = instTbody.querySelectorAll('tr').length;
-				instTbody.appendChild(makeInstRow(cidx, iidx));
-				wrapRow.style.display = '';
-				updateToggleLabel(courseRow);
-			});
-
-			instTbody.querySelectorAll('.sp-inst-remove').forEach(bindInstRemove);
-		}
-
-		courseTbody.querySelectorAll('.sp-course-row').forEach(bindCourseRow);
+		});
 
 		document.getElementById('spot-add-course').addEventListener('click', function () {
 			var cidx      = courseCounter;
@@ -864,68 +484,15 @@ function spot_admin_page() {
 			courseRow.innerHTML  =
 				'<td><input type="text" name="spot_courses[' + cidx + '][name]" placeholder="مثلاً: دوره پایتون" required></td>'
 				+ '<td class="sp-id-col"><input type="text" name="spot_courses[' + cidx + '][id]" placeholder="5d2ee35bcddc092a304ae5eb" pattern="[0-9a-fA-F]{24}" required></td>'
-				+ '<td><div class="sp-td-actions"><button type="button" class="button sp-inst-toggle">📋 اقساط</button><button type="button" class="button spot-remove-row">✕</button></div></td>';
-
-			var wrapRow = document.createElement('tr');
-			wrapRow.className   = 'sp-inst-wrap-row';
-			wrapRow.style.display = 'none';
-			wrapRow.innerHTML   =
-				'<td colspan="3" style="padding:0 0 6px"><div class="sp-inst-wrap">'
-				+ '<table class="sp-inst-table"><thead><tr>'
-				+ '<th style="width:22%">سرفصل از</th><th style="width:28%">تا (خالی = دسترسی کامل)</th>'
-				+ '<th style="width:35%">روز تا سررسید قسط بعدی</th><th style="width:15%"></th>'
-				+ '</tr></thead><tbody class="sp-inst-tbody"></tbody></table>'
-				+ '<button type="button" class="button sp-add-inst">+ افزودن قسط</button>'
-				+ '</div></td>';
+				+ '<td><div class="sp-td-actions"><button type="button" class="button spot-remove-row">✕</button></div></td>';
 
 			courseTbody.appendChild(courseRow);
-			courseTbody.appendChild(wrapRow);
-			bindCourseRow(courseRow);
+			courseRow.querySelector('.spot-remove-row').addEventListener('click', function () {
+				courseRow.remove();
+			});
 			courseRow.querySelector('input').focus();
 			courseCounter++;
 		});
-
-		// ── شمارنده کاراکتر پیامک ────────────────────────────────────────────
-		var ta     = document.getElementById('sp-sms-template');
-		var smsCtr = document.getElementById('sp-sms-counter');
-		if (ta && smsCtr) {
-			function updateCounter() {
-				var len = ta.value.length, parts = len === 0 ? 0 : Math.ceil(len / 70);
-				smsCtr.textContent = len > 0 ? len + ' کاراکتر — حدود ' + parts + ' پارت پیامک فارسی (هر پارت ۷۰ کاراکتر)' : '';
-				smsCtr.style.color = len > 140 ? '#9e2a2a' : '#646970';
-			}
-			ta.addEventListener('input', updateCounter);
-			updateCounter();
-		}
-
-		// ── ارسال پیامک آزمایشی ──────────────────────────────────────────────
-		var smsBtn = document.getElementById('sp-sms-test-btn');
-		var smsRes = document.getElementById('sp-sms-test-result');
-		if (smsBtn) {
-			smsBtn.addEventListener('click', function () {
-				var phone = document.getElementById('sp-sms-test-phone').value.trim();
-				if (!phone) { smsRes.textContent = 'شماره موبایل را وارد کنید.'; smsRes.style.color = '#c00'; return; }
-				smsBtn.disabled = true;
-				smsRes.textContent = '⏳ در حال ارسال…'; smsRes.style.color = '#646970';
-				var fd = new FormData();
-				fd.append('action',       'spot_test_sms');
-				fd.append('nonce',        <?= json_encode(wp_create_nonce('spot_test_sms')) ?>);
-				fd.append('phone',        phone);
-				fd.append('sms_username', document.querySelector('[name="spotplayer[sms_username]"]').value);
-				fd.append('sms_password', document.querySelector('[name="spotplayer[sms_password]"]').value);
-				fd.append('sms_from',     document.querySelector('[name="spotplayer[sms_from]"]').value);
-				fd.append('sms_from1',    document.querySelector('[name="spotplayer[sms_from1]"]').value);
-				fd.append('sms_from2',    document.querySelector('[name="spotplayer[sms_from2]"]').value);
-				fetch(<?= json_encode(admin_url('admin-ajax.php')) ?>, {method: 'POST', body: fd})
-					.then(function (r) { return r.json(); })
-					.then(function (res) {
-						smsRes.textContent = res.success ? '✅ ' + res.data : '❌ ' + (res.data || 'خطای نامشخص');
-						smsRes.style.color  = res.success ? '#1a7a1a' : '#c00';
-					})
-					.catch(function () { smsRes.textContent = '❌ خطا در ارتباط با سرور.'; smsRes.style.color = '#c00'; })
-					.finally(function () { smsBtn.disabled = false; });
-			});
-		}
 
 		// ── پولینگ صف پردازش ─────────────────────────────────────────────────
 		<?php if ($use_async) { ?>
@@ -980,70 +547,6 @@ function spot_admin_page() {
 			if (active > 0) timer = setInterval(poll, 5000);
 		})();
 		<?php } ?>
-
-		// ── جدول پله‌های دسترسی اضافه (per-course + global fallback) ────────
-		(function () {
-			function reindex(tbody) {
-				var cid = tbody.dataset.cid || null; // null = global fallback
-				tbody.querySelectorAll('tr').forEach(function (tr, i) {
-					tr.querySelector('td:first-child').textContent = i + 1;
-					if (cid) {
-						tr.querySelector('select').name = 'spot_extra_course_stages[' + cid + '][stages][' + i + '][type]';
-						tr.querySelector('input[type=number]').name = 'spot_extra_course_stages[' + cid + '][stages][' + i + '][value]';
-					} else {
-						tr.querySelector('select').name = 'spot_extra_stages[' + i + '][type]';
-						tr.querySelector('input[type=number]').name = 'spot_extra_stages[' + i + '][value]';
-					}
-				});
-			}
-
-			function makeRow(tbody) {
-				var cid = tbody.dataset.cid || null;
-				var i   = tbody.querySelectorAll('tr').length;
-				var tr  = document.createElement('tr');
-				var sName = cid
-					? 'spot_extra_course_stages[' + cid + '][stages][' + i + '][type]'
-					: 'spot_extra_stages[' + i + '][type]';
-				var vName = cid
-					? 'spot_extra_course_stages[' + cid + '][stages][' + i + '][value]'
-					: 'spot_extra_stages[' + i + '][value]';
-				tr.innerHTML =
-					'<td style="text-align:center;font-weight:600;color:#646970">' + (i + 1) + '</td>'
-					+ '<td><select name="' + sName + '">'
-					+ '<option value="fixed">مبلغ ثابت (تومان)</option>'
-					+ '<option value="percent">درصد از مجموع سفارش</option>'
-					+ '</select></td>'
-					+ '<td><input type="number" name="' + vName + '" min="0" step="any" placeholder="مثلاً 500000"></td>'
-					+ '<td><button type="button" class="button sp-stage-remove">✕</button></td>';
-				return tr;
-			}
-
-			// Event delegation: remove button
-			document.addEventListener('click', function (e) {
-				var btn = e.target.closest('.sp-stage-remove');
-				if (!btn) return;
-				var tbody = btn.closest('tbody');
-				btn.closest('tr').remove();
-				if (tbody) reindex(tbody);
-			});
-
-			// Per-course add buttons
-			document.querySelectorAll('.sp-add-stage-course').forEach(function (addBtn) {
-				addBtn.addEventListener('click', function () {
-					var tbody = addBtn.closest('.sp-course-extra-body').querySelector('tbody.sp-stages-tbody');
-					if (tbody) tbody.appendChild(makeRow(tbody));
-				});
-			});
-
-			// Global fallback add button
-			var globalAdd   = document.getElementById('sp-add-stage');
-			var globalTbody = document.getElementById('sp-stages-tbody');
-			if (globalAdd && globalTbody) {
-				globalAdd.addEventListener('click', function () {
-					globalTbody.appendChild(makeRow(globalTbody));
-				});
-			}
-		})();
 
 	})();
 	</script>
