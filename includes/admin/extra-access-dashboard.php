@@ -185,7 +185,7 @@ function spot_extra_admin_render(): void {
 		<span style="color:#646970;font-size:12px;margin-right:8px"><?= $total_items ?> درخواست</span>
 	</form>
 
-	<?php if (empty($rows)): ?>
+	<?php if (empty($page_rows)): ?>
 		<p style="color:#646970;padding:12px 0">هیچ درخواستی یافت نشد.</p>
 	<?php else: ?>
 

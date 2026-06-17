@@ -401,7 +401,7 @@ function spot_admin_page() {
 			<hr style="margin:20px 0 16px;border:none;border-top:1px solid #f0f0f1">
 			<p style="font-weight:600;font-size:13px;margin:0 0 12px;color:#1d2327">💳 پیامک دسترسی اضافه لایسنس</p>
 			<div class="sp-field">
-				<label>متن پیامک توضیحات دسترسی اضافه <span style="font-weight:normal;color:#646970">(مرحله ۱ — پس از تأیید ادمین)</span></label>
+				<label>متن پیامک دسترسی اضافه <span style="font-weight:normal;color:#646970">(ارسال خودکار پس از پرداخت موفق)</span></label>
 				<textarea name="spotplayer[sms_template_extra]" class="sp-sms-template" style="height:100px"><?= esc_textarea(@$sp['sms_template_extra']) ?></textarea>
 				<p class="description" style="margin-top:6px">
 					متغیرها: <code>{customer_name}</code> <code>{course_names}</code> <code>{order_id}</code> <code>{site_name}</code><br>

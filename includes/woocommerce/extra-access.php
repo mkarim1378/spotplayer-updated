@@ -534,6 +534,22 @@ function spot_extra_reschedule_report(array $old_value, array $new_value): void 
 }
 add_action('update_option_spotplayer', 'spot_extra_reschedule_report', 10, 2);
 
+// ── Auto-SMS on payment ───────────────────────────────────────────────────────
+
+add_action('woocommerce_order_status_processing', 'spot_extra_auto_sms_on_payment', 20);
+add_action('woocommerce_order_status_completed',  'spot_extra_auto_sms_on_payment', 20);
+function spot_extra_auto_sms_on_payment(int $order_id): void {
+	$order = wc_get_order($order_id);
+	if (!($order instanceof WC_Order)) return;
+	if ($order->get_meta('_spot_extra_request') !== '1') return;
+	// Only trigger once — if already triggered, skip
+	if ($order->get_meta('_spot_sms_msg1_status') !== '') return;
+
+	if (function_exists('spot_sms_trigger_extra')) {
+		spot_sms_trigger_extra($order);
+	}
+}
+
 // ── Daily report: handler ─────────────────────────────────────────────────────
 
 add_action('spot_extra_daily_report', 'spot_extra_handle_daily_report');
