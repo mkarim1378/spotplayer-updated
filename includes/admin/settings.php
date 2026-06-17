@@ -10,10 +10,27 @@ function spot_plugin_action_links($links, $file) {
 add_filter('plugin_action_links', 'spot_plugin_action_links', 10, 2);
 
 function spot_admin_menu() {
-	register_setting('spotplayer', 'spotplayer');
+	register_setting('spotplayer', 'spotplayer', ['sanitize_callback' => 'spot_sanitize_general_settings']);
 	add_menu_page('تنظیمات اسپات پلیر', 'اسپات پلیر', 'manage_options', 'spotplayer', 'spot_admin_page', SPOTPLAYER_URL . 'assets/svg/icon.svg');
 }
 add_action('admin_menu', 'spot_admin_menu');
+
+// Merge-safe sanitize: only overwrites keys from the general settings form,
+// preserving all other keys (SMS, extra-access, etc.) stored in the same option.
+function spot_sanitize_general_settings(array $input): array {
+	$existing = (array) get_option('spotplayer', []);
+	foreach (['api', 'domain', 'color'] as $k) {
+		$existing[$k] = sanitize_text_field($input[$k] ?? '');
+	}
+	foreach (['time', 'completed', 'web', 'webonly', 'download', 'wccrs', 'wcspc'] as $k) {
+		if (!empty($input[$k])) {
+			$existing[$k] = $input[$k];
+		} else {
+			unset($existing[$k]);
+		}
+	}
+	return $existing;
+}
 
 function spot_admin_page() {
 	if (!current_user_can('manage_options')) return;

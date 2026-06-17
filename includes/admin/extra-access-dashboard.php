@@ -78,8 +78,10 @@ function spot_extra_fetch_requests(string $search, string $date_from, string $da
 		$origin_order = $origin_map[$origin_id] ?? null;
 		$course_names = [];
 		if ($origin_order instanceof WC_Order) {
-			foreach (spot_woo_order_items($origin_order, true) as $p)
-				$course_names[] = $p->get_name();
+			foreach ($origin_order->get_items() as $item) {
+				if ($item instanceof WC_Order_Item_Product)
+					$course_names[] = $item->get_name();
+			}
 		}
 
 		$rows[] = [
