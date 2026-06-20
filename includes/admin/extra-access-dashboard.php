@@ -21,9 +21,9 @@ function spot_extra_register_admin_page(): void {
  * When search term present: full fetch + PHP filter (necessary for name/phone search).
  * In both cases origin orders are batch-loaded in a single extra query.
  */
-function spot_extra_fetch_requests(string $search, string $date_from, string $date_to, int $paged = 1, int $per_page = 20): array {
+function spot_extra_fetch_requests(string $search, string $date_from, string $date_to, string $status = '', int $paged = 1, int $per_page = 20): array {
 	$base_args = [
-		'status'     => ['processing', 'completed', 'pending', 'on-hold', 'cancelled', 'failed'],
+		'status'     => $status !== '' ? [$status] : 'any',
 		'orderby'    => 'date',
 		'order'      => 'DESC',
 		'meta_query' => [['key' => '_spot_extra_request', 'value' => '1']],
@@ -190,11 +190,12 @@ function spot_extra_admin_render(): void {
 	$search    = sanitize_text_field($_GET['search']    ?? '');
 	$date_from = sanitize_text_field($_GET['date_from'] ?? '');
 	$date_to   = sanitize_text_field($_GET['date_to']   ?? '');
+	$status    = sanitize_key($_GET['status']            ?? '');
 	$paged     = max(1, intval($_GET['paged'] ?? 1));
 	$per_page  = 20;
 	$page_url  = admin_url('admin.php?page=spot-extra-access');
 
-	$result      = spot_extra_fetch_requests($search, $date_from, $date_to, $paged, $per_page);
+	$result      = spot_extra_fetch_requests($search, $date_from, $date_to, $status, $paged, $per_page);
 	$page_rows   = $result['rows'];
 	$total_items = $result['total'];
 	$total_pages = max(1, (int) ceil($total_items / $per_page));
@@ -426,6 +427,13 @@ function spot_extra_admin_render(): void {
 		<input type="hidden" name="page" value="spot-extra-access">
 		<input type="search" name="search" value="<?= esc_attr($search) ?>"
 		       placeholder="نام یا شماره..." style="width:200px">
+		<select name="status" style="min-width:160px">
+			<option value="">همه وضعیت‌ها</option>
+			<?php foreach (wc_get_order_statuses() as $s_key => $s_label):
+				$s_val = str_replace('wc-', '', $s_key); ?>
+				<option value="<?= esc_attr($s_val) ?>" <?= $status === $s_val ? 'selected' : '' ?>><?= esc_html($s_label) ?></option>
+			<?php endforeach; ?>
+		</select>
 		<label style="font-size:13px">از:
 			<input type="date" name="date_from" value="<?= esc_attr($date_from) ?>" style="margin-right:4px">
 		</label>
@@ -433,7 +441,7 @@ function spot_extra_admin_render(): void {
 			<input type="date" name="date_to" value="<?= esc_attr($date_to) ?>" style="margin-right:4px">
 		</label>
 		<button type="submit" class="button">فیلتر</button>
-		<?php if ($search !== '' || $date_from !== '' || $date_to !== ''): ?>
+		<?php if ($search !== '' || $date_from !== '' || $date_to !== '' || $status !== ''): ?>
 			<a href="<?= esc_url($page_url) ?>" class="button">× پاک کردن</a>
 		<?php endif; ?>
 		<span style="color:#646970;font-size:12px;margin-right:8px"><?= $total_items ?> درخواست</span>
@@ -499,7 +507,7 @@ function spot_extra_admin_render(): void {
 		<?php if ($total_pages > 1): ?>
 		<div style="display:flex;gap:4px;flex-wrap:wrap">
 			<?php for ($p = 1; $p <= $total_pages; $p++): ?>
-				<a href="<?= esc_url(add_query_arg(['paged' => $p, 'search' => $search, 'date_from' => $date_from, 'date_to' => $date_to], $page_url)) ?>"
+				<a href="<?= esc_url(add_query_arg(['paged' => $p, 'search' => $search, 'status' => $status, 'date_from' => $date_from, 'date_to' => $date_to], $page_url)) ?>"
 				   class="button button-small"
 				   style="<?= $p === $paged ? 'font-weight:700;background:#2271b1;color:#fff;border-color:#2271b1' : '' ?>"><?= $p ?></a>
 			<?php endfor; ?>
