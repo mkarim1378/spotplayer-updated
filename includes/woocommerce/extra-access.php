@@ -70,7 +70,24 @@ function spot_extra_render_page(): void {
 	}
 	.spot-extra-history { width:100%; border-collapse:collapse; font-size:13px; }
 	.spot-extra-history th, .spot-extra-history td { text-align:center !important; }
-.spot-extra-history th {
+	.spot-device-group { display:flex; gap:10px; flex-wrap:wrap; margin-top:6px; }
+	.spot-device-opt {
+		display:inline-flex; align-items:center; gap:7px;
+		background:#f9fafb; border:1px solid #d1d5db; border-radius:6px;
+		padding:8px 14px; cursor:pointer; font-size:14px; font-weight:500;
+		transition:border-color .15s, background .15s;
+	}
+	.spot-device-opt:has(input:checked) {
+		background:#eef2ff; border-color:#6366f1; color:#4338ca;
+	}
+	.spot-device-opt input[type=checkbox] { margin:0; accent-color:#6366f1; width:15px; height:15px; }
+	.spot-terms-label {
+		display:flex; align-items:flex-start; gap:10px;
+		background:#fff7ed; border:1px solid #fed7aa; border-radius:6px;
+		padding:12px 14px; font-size:13px; line-height:1.7; cursor:pointer;
+	}
+	.spot-terms-label input[type=checkbox] { margin-top:3px; flex-shrink:0; accent-color:#6366f1; width:15px; height:15px; }
+	.spot-extra-history th {
 		background:#f9fafb; padding:8px 12px;
 		border:1px solid #e5e7eb; font-weight:600;
 	}
@@ -208,6 +225,32 @@ function spot_extra_render_page(): void {
 				<em id="spot-extra-stage" style="margin-right:6px;color:#888"></em>
 			</p>
 
+			<div class="form-row" id="spot-extra-devices-row" style="display:none">
+				<label>کدام دستگاه فعال‌شده را می‌خواهید غیرفعال کنیم و به جایش دسترسی اضافه بدهیم؟</label>
+				<p style="color:#6b7280;font-size:13px;margin:4px 0 10px">می‌توانید چند گزینه را انتخاب کنید.</p>
+				<div class="spot-device-group">
+					<label class="spot-device-opt">
+						<input type="checkbox" name="spot_extra_devices[]" value="windows" id="spot-dev-windows">
+						<span>ویندوز</span>
+					</label>
+					<label class="spot-device-opt">
+						<input type="checkbox" name="spot_extra_devices[]" value="android" id="spot-dev-android">
+						<span>اندروید</span>
+					</label>
+					<label class="spot-device-opt">
+						<input type="checkbox" name="spot_extra_devices[]" value="web" id="spot-dev-web">
+						<span>وب (آیفون)</span>
+					</label>
+				</div>
+			</div>
+
+			<div class="form-row" id="spot-extra-terms-row" style="display:none">
+				<label class="spot-terms-label">
+					<input type="checkbox" name="spot_extra_terms" value="1" id="spot_extra_terms">
+					<span>آگاهم که لایسنس فعال‌شده فعلی غیرفعال و غیرقابل‌استفاده خواهد شد و لایسنس جدید جایگزین آن می‌شود.</span>
+				</label>
+			</div>
+
 			<?php if ($has_options): ?>
 				<p class="form-row">
 					<button type="submit" id="spot-extra-submit-btn" class="button" disabled>
@@ -257,24 +300,50 @@ function spot_extra_render_page(): void {
 	</div>
 	<script>
 	(function () {
-		var map     = <?= wp_json_encode($price_map) ?>;
-		var sel     = document.getElementById('spot_extra_origin_order');
-		var priceRow = document.getElementById('spot-extra-price-row');
-		var priceEl  = document.getElementById('spot-extra-price');
-		var stageEl  = document.getElementById('spot-extra-stage');
-		var btn      = document.getElementById('spot-extra-submit-btn');
+		var map         = <?= wp_json_encode($price_map) ?>;
+		var sel         = document.getElementById('spot_extra_origin_order');
+		var priceRow    = document.getElementById('spot-extra-price-row');
+		var priceEl     = document.getElementById('spot-extra-price');
+		var stageEl     = document.getElementById('spot-extra-stage');
+		var devicesRow  = document.getElementById('spot-extra-devices-row');
+		var termsRow    = document.getElementById('spot-extra-terms-row');
+		var termsChk    = document.getElementById('spot_extra_terms');
+		var btn         = document.getElementById('spot-extra-submit-btn');
+		var devCheckboxes = devicesRow ? devicesRow.querySelectorAll('input[type=checkbox]') : [];
 		if (!sel) return;
+
+		function updateBtn() {
+			var orderOk  = sel.value && map[sel.value] && !map[sel.value].blocked;
+			var devOk    = false;
+			for (var i = 0; i < devCheckboxes.length; i++) {
+				if (devCheckboxes[i].checked) { devOk = true; break; }
+			}
+			var termsOk  = termsChk && termsChk.checked;
+			if (btn) btn.disabled = !(orderOk && devOk && termsOk);
+		}
+
 		sel.addEventListener('change', function () {
 			var oid = this.value;
 			var d   = oid ? map[oid] : null;
 			var ok  = d && !d.blocked;
-			if (priceRow) priceRow.style.display = ok ? '' : 'none';
-			if (btn)      btn.disabled = !ok;
+			if (priceRow)   priceRow.style.display   = ok ? '' : 'none';
+			if (devicesRow) devicesRow.style.display  = ok ? '' : 'none';
+			if (termsRow)   termsRow.style.display    = ok ? '' : 'none';
+			if (!ok) {
+				for (var i = 0; i < devCheckboxes.length; i++) devCheckboxes[i].checked = false;
+				if (termsChk) termsChk.checked = false;
+			}
 			if (ok) {
 				priceEl.textContent = Number(d.price).toLocaleString('fa-IR') + ' تومان';
 				stageEl.textContent = '(مرحله ' + d.stage + ')';
 			}
+			updateBtn();
 		});
+
+		for (var i = 0; i < devCheckboxes.length; i++) {
+			devCheckboxes[i].addEventListener('change', updateBtn);
+		}
+		if (termsChk) termsChk.addEventListener('change', updateBtn);
 	})();
 	</script>
 	<?php
@@ -308,6 +377,17 @@ function spot_extra_handle_submit(): void {
 
 	if (!$origin_id) {
 		$set_error('لطفاً یک سفارش انتخاب کنید.');
+	}
+
+	$allowed_devices = ['windows', 'android', 'web'];
+	$raw_devices     = isset($_POST['spot_extra_devices']) ? (array) $_POST['spot_extra_devices'] : [];
+	$devices         = array_values(array_intersect(array_map('sanitize_key', $raw_devices), $allowed_devices));
+	if (empty($devices)) {
+		$set_error('لطفاً حداقل یک دستگاه برای غیرفعال‌سازی انتخاب کنید.');
+	}
+
+	if (empty($_POST['spot_extra_terms']) || $_POST['spot_extra_terms'] !== '1') {
+		$set_error('برای ادامه باید قوانین را بپذیرید.');
 	}
 
 	$origin_order = wc_get_order($origin_id);
@@ -347,6 +427,7 @@ function spot_extra_handle_submit(): void {
 	$new_order->update_meta_data('_spot_extra_request',      '1');
 	$new_order->update_meta_data('_spot_extra_origin_order', (string) $origin_id);
 	$new_order->update_meta_data('_spot_extra_stage',        (string) $calc['stage']);
+	$new_order->update_meta_data('_spot_extra_devices',      implode(',', $devices));
 
 	$new_order->calculate_totals();
 	$new_order->save();

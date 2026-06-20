@@ -95,6 +95,7 @@ function spot_extra_fetch_requests(string $search, string $date_from, string $da
 			'total'        => $order->get_total(),
 			'date'         => $dt ? $dt->date('Y-m-d') : '',
 			'status'       => $order->get_status(),
+			'devices'      => (string) $order->get_meta('_spot_extra_devices'),
 			'msg1_status'  => (string) $order->get_meta('_spot_sms_msg1_status'),
 			'msg2_status'  => (string) $order->get_meta('_spot_sms_msg2_status'),
 		];
@@ -451,23 +452,33 @@ function spot_extra_admin_render(): void {
 		<p style="color:#646970;padding:12px 0">هیچ درخواستی یافت نشد.</p>
 	<?php else: ?>
 
+	<?php
+	$device_labels = ['windows' => 'ویندوز', 'android' => 'اندروید', 'web' => 'وب (آیفون)'];
+	?>
 	<table class="wp-list-table widefat fixed striped">
 		<thead><tr>
-			<th style="width:8%">شماره</th>
-			<th style="width:13%">نام مشتری</th>
-			<th style="width:11%">موبایل</th>
-			<th style="width:16%">دوره‌ها</th>
+			<th style="width:7%">شماره</th>
+			<th style="width:12%">نام مشتری</th>
+			<th style="width:10%">موبایل</th>
+			<th style="width:13%">دوره‌ها</th>
 			<th style="width:5%">مرحله</th>
-			<th style="width:8%">مبلغ</th>
-			<th style="width:11%">وضعیت</th>
-			<th style="width:8%">تاریخ</th>
-			<th style="width:10%">پیامک</th>
-			<th style="width:10%">عملیات</th>
+			<th style="width:7%">مبلغ</th>
+			<th style="width:10%">وضعیت</th>
+			<th style="width:12%">دستگاه</th>
+			<th style="width:7%">تاریخ</th>
+			<th style="width:9%">پیامک</th>
+			<th style="width:8%">عملیات</th>
 		</tr></thead>
 		<tbody>
 		<?php if (empty($page_rows)): ?>
-			<tr><td colspan="10" style="text-align:center;color:#646970;padding:24px">موردی یافت نشد.</td></tr>
-		<?php else: foreach ($page_rows as $r): ?>
+			<tr><td colspan="11" style="text-align:center;color:#646970;padding:24px">موردی یافت نشد.</td></tr>
+		<?php else: foreach ($page_rows as $r):
+			$devs = array_filter(explode(',', $r['devices']));
+			$dev_badges = [];
+			foreach ($devs as $d) {
+				if (isset($device_labels[$d])) $dev_badges[] = '<span style="display:inline-block;padding:1px 6px;border-radius:3px;font-size:11px;background:#f3f4f6;border:1px solid #d1d5db">' . esc_html($device_labels[$d]) . '</span>';
+			}
+		?>
 			<tr>
 				<td>
 					<a href="<?= esc_url($r['order']->get_edit_order_url()) ?>">#<?= $r['order_id'] ?></a>
@@ -481,6 +492,7 @@ function spot_extra_admin_render(): void {
 				<td style="text-align:center"><?= esc_html($r['stage']) ?></td>
 				<td><?= wc_price($r['total']) ?></td>
 				<td><?= spot_extra_order_badge($r['status']) ?></td>
+				<td><?= !empty($dev_badges) ? implode(' ', $dev_badges) : '<span style="color:#9ca3af">—</span>' ?></td>
 				<td><?= esc_html($r['date']) ?></td>
 				<td>
 					<div><?= spot_extra_sms_badge($r['msg1_status']) ?></div>
