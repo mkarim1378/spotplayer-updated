@@ -39,7 +39,7 @@ function spot_extra_fetch_requests(string $search, string $date_from, string $da
 		if (empty($page_ids)) {
 			return ['rows' => [], 'total' => $db_total];
 		}
-		$fetched = wc_get_orders(['include' => $page_ids, 'limit' => count($page_ids)]);
+		$fetched = wc_get_orders(['include' => $page_ids, 'limit' => count($page_ids), 'status' => $status !== '' ? [$status] : 'any']);
 		// Restore original sort order
 		$omap = [];
 		foreach ($fetched as $o) $omap[$o->get_id()] = $o;
