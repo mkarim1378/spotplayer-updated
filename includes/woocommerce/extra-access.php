@@ -179,6 +179,38 @@ function spot_extra_render_page(): void {
 	}
 
 	$has_options = !empty($order_options);
+
+	// Manual mode: per-course price map for customers without licensed WC orders
+	$all_courses = get_option('spot_courses', []);
+	$manual_counts = [];
+	foreach ($all_extra as $ex) {
+		if ($ex->get_meta('_spot_extra_manual') === '1') {
+			$mcid = $ex->get_meta('_spot_extra_manual_course');
+			if ($mcid !== '') {
+				$manual_counts[$mcid] = ($manual_counts[$mcid] ?? 0) + 1;
+			}
+		}
+	}
+	$sp_opt = get_option('spotplayer', []);
+	$manual_price_map = [];
+	foreach ($all_courses as $course) {
+		$cid = $course['id'] ?? '';
+		if ($cid === '') continue;
+		$count = $manual_counts[$cid] ?? 0;
+		$cmap  = (array) ($sp_opt['extra_course_stages'] ?? []);
+		if (!empty($cmap[$cid]['stages'])) {
+			$cfg = ['stages' => array_values($cmap[$cid]['stages']), 'end_mode' => $cmap[$cid]['end_mode'] ?? 'max'];
+		} else {
+			$cfg = ['stages' => array_values((array) ($sp_opt['extra_stages'] ?? [])), 'end_mode' => $sp_opt['extra_end_mode'] ?? 'max'];
+		}
+		$mcalc = spot_extra_calc_price_from_count(0, $count, null, $cfg);
+		$manual_price_map[$cid] = [
+			'price'   => $mcalc['price'],
+			'stage'   => $mcalc['stage'],
+			'blocked' => $mcalc['blocked'],
+		];
+	}
+	$has_manual = !empty($manual_price_map);
 	?>
 	<div class="spot-extra-wrap">
 
@@ -189,6 +221,7 @@ function spot_extra_render_page(): void {
 		<form method="post" class="spot-extra-form">
 			<?php wp_nonce_field('spot_extra_submit', 'spot_extra_nonce') ?>
 			<input type="hidden" name="spot_extra_submit" value="1">
+			<input type="hidden" name="spot_extra_mode" value="<?= (!$has_options && $has_manual) ? 'manual' : 'order' ?>" id="spot_extra_mode">
 
 			<p class="form-row">
 				<label>نام مشتری</label>
@@ -202,22 +235,60 @@ function spot_extra_render_page(): void {
 				       placeholder="09XXXXXXXXX" maxlength="11" class="input-text">
 			</p>
 
-			<p class="form-row">
+			<?php if ($has_options): ?>
+			<p class="form-row" id="spot-extra-order-row">
 				<label for="spot_extra_origin_order">لایسنس مورد نظر</label>
-				<?php if (!$has_options): ?>
-					<span>هیچ سفارش لایسنس‌داری یافت نشد.</span>
-				<?php else: ?>
-					<select id="spot_extra_origin_order" name="spot_extra_origin_order" class="input-text">
-						<option value="">-- انتخاب کنید --</option>
-						<?php foreach ($order_options as $opt): ?>
-							<option value="<?= esc_attr($opt['id']) ?>"
-							        <?php disabled($opt['blocked']) ?>>
-								<?= esc_html($opt['label']) ?>
+				<select id="spot_extra_origin_order" name="spot_extra_origin_order" class="input-text">
+					<option value="">-- انتخاب کنید --</option>
+					<?php foreach ($order_options as $opt): ?>
+						<option value="<?= esc_attr($opt['id']) ?>"
+						        <?php disabled($opt['blocked']) ?>>
+							<?= esc_html($opt['label']) ?>
+						</option>
+					<?php endforeach ?>
+				</select>
+			</p>
+				<?php if ($has_manual): ?>
+				<p class="form-row" id="spot-extra-toggle-wrap" style="margin-top:-10px">
+					<a href="#" id="spot-manual-toggle" style="font-size:13px;color:#6366f1">لایسنس من در لیست نیست ›</a>
+				</p>
+				<p class="form-row" id="spot-extra-manual-row" style="display:none">
+					<label for="spot_extra_manual_course">دوره‌ای که قبلاً خریداری کرده‌اید را انتخاب کنید</label>
+					<select id="spot_extra_manual_course" name="spot_extra_manual_course" class="input-text">
+						<option value="">-- انتخاب دوره --</option>
+						<?php foreach ($all_courses as $course):
+							$cid = $course['id'] ?? '';
+							$cname = $course['name'] ?? $cid;
+							if ($cid === '') continue;
+							$mc = $manual_price_map[$cid] ?? null;
+						?>
+							<option value="<?= esc_attr($cid) ?>" <?php if ($mc && $mc['blocked']) echo 'disabled' ?>>
+								<?= esc_html($cname) ?><?= ($mc && $mc['blocked']) ? ' (سقف درخواست)' : '' ?>
 							</option>
 						<?php endforeach ?>
 					</select>
+				</p>
 				<?php endif ?>
+			<?php elseif ($has_manual): ?>
+			<p class="form-row" id="spot-extra-manual-row">
+				<label for="spot_extra_manual_course">دوره‌ای که قبلاً خریداری کرده‌اید را انتخاب کنید</label>
+				<select id="spot_extra_manual_course" name="spot_extra_manual_course" class="input-text">
+					<option value="">-- انتخاب دوره --</option>
+					<?php foreach ($all_courses as $course):
+						$cid = $course['id'] ?? '';
+						$cname = $course['name'] ?? $cid;
+						if ($cid === '') continue;
+						$mc = $manual_price_map[$cid] ?? null;
+					?>
+						<option value="<?= esc_attr($cid) ?>" <?php if ($mc && $mc['blocked']) echo 'disabled' ?>>
+							<?= esc_html($cname) ?><?= ($mc && $mc['blocked']) ? ' (سقف درخواست)' : '' ?>
+						</option>
+					<?php endforeach ?>
+				</select>
 			</p>
+			<?php else: ?>
+			<p class="form-row"><span>امکان ثبت درخواست در حال حاضر وجود ندارد.</span></p>
+			<?php endif ?>
 
 			<p class="form-row" id="spot-extra-price-row" style="display:none">
 				<label>مبلغ پرداختی</label>
@@ -251,7 +322,7 @@ function spot_extra_render_page(): void {
 				</label>
 			</div>
 
-			<?php if ($has_options): ?>
+			<?php if ($has_options || $has_manual): ?>
 				<p class="form-row">
 					<button type="submit" id="spot-extra-submit-btn" class="button" disabled>
 						پرداخت و ثبت درخواست
@@ -277,16 +348,25 @@ function spot_extra_render_page(): void {
 					<?php foreach ($past_requests as $req):
 						$origin_id    = (int) $req->get_meta('_spot_extra_origin_order');
 						$stage        = (int) $req->get_meta('_spot_extra_stage');
-						$origin_order = $origin_map[$origin_id] ?? null;
+						$req_manual   = $req->get_meta('_spot_extra_manual') === '1';
 						$c_names      = [];
-						if ($origin_order instanceof WC_Order) {
-							foreach (spot_woo_order_items($origin_order, true) as $p)
-								$c_names[] = $p->get_name();
+						if ($req_manual) {
+							$mn = (string) $req->get_meta('_spot_extra_manual_course_name');
+							if ($mn !== '') $c_names[] = $mn;
+						} else {
+							$origin_order = $origin_map[$origin_id] ?? null;
+							if ($origin_order instanceof WC_Order) {
+								foreach (spot_woo_order_items($origin_order, true) as $p)
+									$c_names[] = $p->get_name();
+							}
 						}
 					?>
 					<tr>
 						<td>#<?= $req->get_id() ?></td>
-						<td><?= esc_html(implode('، ', $c_names) ?: '#' . $origin_id) ?></td>
+						<td>
+							<?= esc_html(implode('، ', $c_names) ?: ($origin_id ? '#' . $origin_id : '—')) ?>
+							<?php if ($req_manual): ?><small style="color:#92400e"> (دستی)</small><?php endif ?>
+						</td>
 						<td><?= esc_html($stage) ?></td>
 						<td><?= wc_price($req->get_total()) ?></td>
 						<td><?= esc_html(wc_format_datetime($req->get_date_created())) ?></td>
@@ -300,8 +380,11 @@ function spot_extra_render_page(): void {
 	</div>
 	<script>
 	(function () {
-		var map         = <?= wp_json_encode($price_map) ?>;
+		var orderMap    = <?= wp_json_encode($price_map) ?>;
+		var manualMap   = <?= wp_json_encode($manual_price_map) ?>;
 		var sel         = document.getElementById('spot_extra_origin_order');
+		var manualSel   = document.getElementById('spot_extra_manual_course');
+		var modeInput   = document.getElementById('spot_extra_mode');
 		var priceRow    = document.getElementById('spot-extra-price-row');
 		var priceEl     = document.getElementById('spot-extra-price');
 		var stageEl     = document.getElementById('spot-extra-stage');
@@ -310,35 +393,93 @@ function spot_extra_render_page(): void {
 		var termsChk    = document.getElementById('spot_extra_terms');
 		var btn         = document.getElementById('spot-extra-submit-btn');
 		var devCheckboxes = devicesRow ? devicesRow.querySelectorAll('input[type=checkbox]') : [];
-		if (!sel) return;
+		var toggleLink  = document.getElementById('spot-manual-toggle');
+		var orderRow    = document.getElementById('spot-extra-order-row');
+		var manualRow   = document.getElementById('spot-extra-manual-row');
+		var toggleWrap  = document.getElementById('spot-extra-toggle-wrap');
+		var isManual    = modeInput && modeInput.value === 'manual';
+
+		if (!btn) return;
 
 		function updateBtn() {
-			var orderOk  = sel.value && map[sel.value] && !map[sel.value].blocked;
-			var devOk    = false;
+			var selOk = false;
+			if (isManual) {
+				var cid = manualSel ? manualSel.value : '';
+				var md  = cid ? manualMap[cid] : null;
+				selOk   = md && !md.blocked;
+			} else {
+				var oid = sel ? sel.value : '';
+				var od  = oid ? orderMap[oid] : null;
+				selOk   = od && !od.blocked;
+			}
+			var devOk = false;
 			for (var i = 0; i < devCheckboxes.length; i++) {
 				if (devCheckboxes[i].checked) { devOk = true; break; }
 			}
-			var termsOk  = termsChk && termsChk.checked;
-			if (btn) btn.disabled = !(orderOk && devOk && termsOk);
+			var termsOk = termsChk && termsChk.checked;
+			btn.disabled = !(selOk && devOk && termsOk);
 		}
 
-		sel.addEventListener('change', function () {
-			var oid = this.value;
-			var d   = oid ? map[oid] : null;
-			var ok  = d && !d.blocked;
-			if (priceRow)   priceRow.style.display   = ok ? '' : 'none';
-			if (devicesRow) devicesRow.style.display  = ok ? '' : 'none';
-			if (termsRow)   termsRow.style.display    = ok ? '' : 'none';
-			if (!ok) {
-				for (var i = 0; i < devCheckboxes.length; i++) devCheckboxes[i].checked = false;
-				if (termsChk) termsChk.checked = false;
-			}
-			if (ok) {
-				priceEl.textContent = Number(d.price).toLocaleString('fa-IR') + ' تومان';
-				stageEl.textContent = '(مرحله ' + d.stage + ')';
+		function showPrice(price, stage) {
+			if (priceRow) priceRow.style.display = '';
+			if (priceEl) priceEl.textContent = Number(price).toLocaleString('fa-IR') + ' تومان';
+			if (stageEl) stageEl.textContent = '(مرحله ' + stage + ')';
+		}
+
+		function hideExtras() {
+			if (priceRow)   priceRow.style.display  = 'none';
+			if (devicesRow) devicesRow.style.display = 'none';
+			if (termsRow)   termsRow.style.display   = 'none';
+			for (var i = 0; i < devCheckboxes.length; i++) devCheckboxes[i].checked = false;
+			if (termsChk) termsChk.checked = false;
+			updateBtn();
+		}
+
+		function onSelect(d) {
+			if (d && !d.blocked) {
+				showPrice(d.price, d.stage);
+				if (devicesRow) devicesRow.style.display = '';
+				if (termsRow)   termsRow.style.display   = '';
+			} else {
+				hideExtras();
 			}
 			updateBtn();
-		});
+		}
+
+		if (sel) {
+			sel.addEventListener('change', function () {
+				if (isManual) return;
+				onSelect(this.value ? orderMap[this.value] : null);
+			});
+		}
+
+		if (manualSel) {
+			manualSel.addEventListener('change', function () {
+				if (!isManual) return;
+				onSelect(this.value ? manualMap[this.value] : null);
+			});
+		}
+
+		if (toggleLink) {
+			toggleLink.addEventListener('click', function (e) {
+				e.preventDefault();
+				isManual = !isManual;
+				modeInput.value = isManual ? 'manual' : 'order';
+				if (isManual) {
+					if (orderRow)   orderRow.style.display   = 'none';
+					if (manualRow)  manualRow.style.display   = '';
+					if (toggleWrap) toggleWrap.style.display  = '';
+					if (sel) sel.value = '';
+					toggleLink.textContent = '‹ بازگشت به لیست سفارش‌ها';
+				} else {
+					if (orderRow)   orderRow.style.display   = '';
+					if (manualRow)  manualRow.style.display   = 'none';
+					if (manualSel) manualSel.value = '';
+					toggleLink.textContent = 'لایسنس من در لیست نیست ›';
+				}
+				hideExtras();
+			});
+		}
 
 		for (var i = 0; i < devCheckboxes.length; i++) {
 			devCheckboxes[i].addEventListener('change', updateBtn);
@@ -372,12 +513,8 @@ function spot_extra_handle_submit(): void {
 		$set_error('خطای امنیتی. لطفاً دوباره تلاش کنید.');
 	}
 
-	$origin_id = absint($_POST['spot_extra_origin_order'] ?? 0);
-	$phone     = spot_sms_normalize_phone(sanitize_text_field(wp_unslash($_POST['spot_extra_phone'] ?? '')));
-
-	if (!$origin_id) {
-		$set_error('لطفاً یک سفارش انتخاب کنید.');
-	}
+	$mode  = sanitize_key($_POST['spot_extra_mode'] ?? 'order');
+	$phone = spot_sms_normalize_phone(sanitize_text_field(wp_unslash($_POST['spot_extra_phone'] ?? '')));
 
 	$allowed_devices = ['windows', 'android', 'web'];
 	$raw_devices     = isset($_POST['spot_extra_devices']) ? (array) $_POST['spot_extra_devices'] : [];
@@ -385,57 +522,117 @@ function spot_extra_handle_submit(): void {
 	if (empty($devices)) {
 		$set_error('لطفاً حداقل یک دستگاه برای غیرفعال‌سازی انتخاب کنید.');
 	}
-
 	if (empty($_POST['spot_extra_terms']) || $_POST['spot_extra_terms'] !== '1') {
 		$set_error('برای ادامه باید قوانین را بپذیرید.');
 	}
 
-	$origin_order = wc_get_order($origin_id);
-	if (!($origin_order instanceof WC_Order) || (int) $origin_order->get_customer_id() !== $uid) {
-		$set_error('سفارش مورد نظر یافت نشد.');
+	$origin_order = null;
+	$fee_label    = '';
+	$extra_meta   = ['_spot_extra_request' => '1', '_spot_extra_devices' => implode(',', $devices)];
+
+	if ($mode === 'manual') {
+		// ── Manual mode: customer selects course from spot_courses list ──
+		$manual_cid = sanitize_text_field($_POST['spot_extra_manual_course'] ?? '');
+		if (!$manual_cid) {
+			$set_error('لطفاً یک دوره انتخاب کنید.');
+		}
+		$all_courses = get_option('spot_courses', []);
+		$course_name = '';
+		foreach ($all_courses as $c) {
+			if (($c['id'] ?? '') === $manual_cid) {
+				$course_name = $c['name'] ?? $manual_cid;
+				break;
+			}
+		}
+		if ($course_name === '') {
+			$set_error('دوره انتخاب‌شده معتبر نیست.');
+		}
+
+		$manual_count = count(wc_get_orders([
+			'customer' => $uid, 'limit' => -1, 'return' => 'ids',
+			'status'   => ['processing', 'completed'],
+			'meta_query' => [
+				'relation' => 'AND',
+				['key' => '_spot_extra_request', 'value' => '1'],
+				['key' => '_spot_extra_manual',  'value' => '1'],
+				['key' => '_spot_extra_manual_course', 'value' => $manual_cid],
+			],
+		]));
+
+		$sp_opt = get_option('spotplayer', []);
+		$cmap   = (array) ($sp_opt['extra_course_stages'] ?? []);
+		if (!empty($cmap[$manual_cid]['stages'])) {
+			$cfg = ['stages' => array_values($cmap[$manual_cid]['stages']), 'end_mode' => $cmap[$manual_cid]['end_mode'] ?? 'max'];
+		} else {
+			$cfg = ['stages' => array_values((array) ($sp_opt['extra_stages'] ?? [])), 'end_mode' => $sp_opt['extra_end_mode'] ?? 'max'];
+		}
+		$calc = spot_extra_calc_price_from_count(0, $manual_count, null, $cfg);
+		if ($calc['blocked']) {
+			$set_error('به سقف درخواست دسترسی اضافه رسیده‌اید.');
+		}
+
+		$fee_label  = 'درخواست دسترسی اضافه — دوره ' . $course_name;
+		$extra_meta['_spot_extra_manual']             = '1';
+		$extra_meta['_spot_extra_manual_course']      = $manual_cid;
+		$extra_meta['_spot_extra_manual_course_name'] = $course_name;
+		$extra_meta['_spot_extra_stage']              = (string) $calc['stage'];
+	} else {
+		// ── Order mode: customer selects from licensed WC orders ──
+		$origin_id = absint($_POST['spot_extra_origin_order'] ?? 0);
+		if (!$origin_id) {
+			$set_error('لطفاً یک سفارش انتخاب کنید.');
+		}
+
+		$origin_order = wc_get_order($origin_id);
+		if (!($origin_order instanceof WC_Order) || (int) $origin_order->get_customer_id() !== $uid) {
+			$set_error('سفارش مورد نظر یافت نشد.');
+		}
+
+		$spot_data = $origin_order->get_meta('_spotplayer_data');
+		if (empty($spot_data['_id'])) {
+			$set_error('این سفارش دارای لایسنس اسپات نیست.');
+		}
+
+		$calc = spot_extra_calc_price($origin_id);
+		if ($calc['blocked']) {
+			$set_error('به سقف درخواست دسترسی اضافه رسیده‌اید.');
+		}
+
+		$fee_label = 'درخواست دسترسی اضافه — لایسنس #' . $origin_id;
+		$extra_meta['_spot_extra_origin_order'] = (string) $origin_id;
+		$extra_meta['_spot_extra_stage']        = (string) $calc['stage'];
 	}
 
-	$spot_data = $origin_order->get_meta('_spotplayer_data');
-	if (empty($spot_data['_id'])) {
-		$set_error('این سفارش دارای لایسنس اسپات نیست.');
-	}
-
-	$calc = spot_extra_calc_price($origin_id);
-	if ($calc['blocked']) {
-		$set_error('به سقف درخواست دسترسی اضافه رسیده‌اید.');
-	}
-
-	// Copy billing address — prefer customer profile, fallback to origin order
+	// ── Create order ──
 	$customer  = new WC_Customer($uid);
 	$new_order = wc_create_order(['customer_id' => $uid]);
 
 	$first = $customer->get_billing_first_name();
 	$last  = $customer->get_billing_last_name();
-	if (trim($first . $last) === '') {
+	if (trim($first . $last) === '' && $origin_order instanceof WC_Order) {
 		$first = $origin_order->get_billing_first_name();
 		$last  = $origin_order->get_billing_last_name();
 	}
-	$email = $customer->get_billing_email() ?: $origin_order->get_billing_email();
+	$email = $customer->get_billing_email() ?: ($origin_order instanceof WC_Order ? $origin_order->get_billing_email() : '');
 
 	$new_order->set_billing_first_name($first);
 	$new_order->set_billing_last_name($last);
 	$new_order->set_billing_email($email);
-	$new_order->set_billing_phone($phone ?: $customer->get_billing_phone() ?: $origin_order->get_billing_phone());
-	$new_order->set_billing_address_1($customer->get_billing_address_1() ?: $origin_order->get_billing_address_1());
-	$new_order->set_billing_city($customer->get_billing_city() ?: $origin_order->get_billing_city());
-	$new_order->set_billing_country($customer->get_billing_country() ?: $origin_order->get_billing_country());
+	$new_order->set_billing_phone($phone ?: $customer->get_billing_phone() ?: ($origin_order instanceof WC_Order ? $origin_order->get_billing_phone() : ''));
+	$new_order->set_billing_address_1($customer->get_billing_address_1() ?: ($origin_order instanceof WC_Order ? $origin_order->get_billing_address_1() : ''));
+	$new_order->set_billing_city($customer->get_billing_city() ?: ($origin_order instanceof WC_Order ? $origin_order->get_billing_city() : ''));
+	$new_order->set_billing_country($customer->get_billing_country() ?: ($origin_order instanceof WC_Order ? $origin_order->get_billing_country() : ''));
 
 	$fee = new WC_Order_Item_Fee();
-	$fee->set_name('درخواست دسترسی اضافه — لایسنس #' . $origin_id);
+	$fee->set_name($fee_label);
 	$fee->set_amount($calc['price']);
 	$fee->set_total($calc['price']);
 	$fee->set_tax_status('none');
 	$new_order->add_item($fee);
 
-	$new_order->update_meta_data('_spot_extra_request',      '1');
-	$new_order->update_meta_data('_spot_extra_origin_order', (string) $origin_id);
-	$new_order->update_meta_data('_spot_extra_stage',        (string) $calc['stage']);
-	$new_order->update_meta_data('_spot_extra_devices',      implode(',', $devices));
+	foreach ($extra_meta as $mk => $mv) {
+		$new_order->update_meta_data($mk, $mv);
+	}
 
 	$new_order->calculate_totals();
 	$new_order->save();

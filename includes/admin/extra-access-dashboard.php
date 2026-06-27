@@ -82,8 +82,12 @@ function spot_extra_fetch_requests(string $search, string $date_from, string $da
 
 		$stage        = (int) $order->get_meta('_spot_extra_stage');
 		$dt           = $order->get_date_created();
-		$course_names = [];
-		if ($origin_order instanceof WC_Order) {
+		$is_manual     = $order->get_meta('_spot_extra_manual') === '1';
+		$course_names  = [];
+		if ($is_manual) {
+			$manual_name = (string) $order->get_meta('_spot_extra_manual_course_name');
+			if ($manual_name !== '') $course_names[] = $manual_name;
+		} elseif ($origin_order instanceof WC_Order) {
 			foreach ($origin_order->get_items() as $item) {
 				if ($item instanceof WC_Order_Item_Product)
 					$course_names[] = $item->get_name();
@@ -95,6 +99,7 @@ function spot_extra_fetch_requests(string $search, string $date_from, string $da
 			'order_id'     => $order->get_id(),
 			'origin_id'    => $origin_id,
 			'origin_order' => $origin_order,
+			'is_manual'    => $is_manual,
 			'stage'        => $stage,
 			'name'         => $name,
 			'phone'        => $phone,
@@ -504,7 +509,12 @@ function spot_extra_admin_render(): void {
 					<a href="tel:<?= esc_attr($raw_phone) ?>"><?= esc_html($display_phone) ?></a>
 					<button type="button" class="spot-copy-phone" data-phone="<?= esc_attr($display_phone) ?>" title="کپی شماره" style="border:none;background:none;cursor:pointer;padding:0 3px;font-size:14px;vertical-align:middle;opacity:.5">📋</button>
 				</td>
-				<td><?= esc_html($r['courses']) ?></td>
+				<td>
+					<?= esc_html($r['courses']) ?>
+					<?php if ($r['is_manual']): ?>
+						<br><span style="display:inline-block;padding:1px 5px;border-radius:3px;font-size:10px;font-weight:600;background:#fef3c7;color:#92400e;margin-top:2px">دستی</span>
+					<?php endif; ?>
+				</td>
 				<td style="text-align:center"><?= esc_html($r['stage']) ?></td>
 				<td><?= wc_price($r['total']) ?></td>
 				<td><?= spot_extra_order_badge($r['status']) ?></td>
