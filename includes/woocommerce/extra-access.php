@@ -405,17 +405,25 @@ function spot_extra_handle_submit(): void {
 		$set_error('به سقف درخواست دسترسی اضافه رسیده‌اید.');
 	}
 
-	// Copy billing address from the original order
-	$customer = new WC_Customer($uid);
+	// Copy billing address — prefer customer profile, fallback to origin order
+	$customer  = new WC_Customer($uid);
 	$new_order = wc_create_order(['customer_id' => $uid]);
 
-	$new_order->set_billing_first_name($customer->get_billing_first_name());
-	$new_order->set_billing_last_name($customer->get_billing_last_name());
-	$new_order->set_billing_email($customer->get_billing_email());
-	$new_order->set_billing_phone($phone ?: $customer->get_billing_phone());
-	$new_order->set_billing_address_1($customer->get_billing_address_1());
-	$new_order->set_billing_city($customer->get_billing_city());
-	$new_order->set_billing_country($customer->get_billing_country());
+	$first = $customer->get_billing_first_name();
+	$last  = $customer->get_billing_last_name();
+	if (trim($first . $last) === '') {
+		$first = $origin_order->get_billing_first_name();
+		$last  = $origin_order->get_billing_last_name();
+	}
+	$email = $customer->get_billing_email() ?: $origin_order->get_billing_email();
+
+	$new_order->set_billing_first_name($first);
+	$new_order->set_billing_last_name($last);
+	$new_order->set_billing_email($email);
+	$new_order->set_billing_phone($phone ?: $customer->get_billing_phone() ?: $origin_order->get_billing_phone());
+	$new_order->set_billing_address_1($customer->get_billing_address_1() ?: $origin_order->get_billing_address_1());
+	$new_order->set_billing_city($customer->get_billing_city() ?: $origin_order->get_billing_city());
+	$new_order->set_billing_country($customer->get_billing_country() ?: $origin_order->get_billing_country());
 
 	$fee = new WC_Order_Item_Fee();
 	$fee->set_name('درخواست دسترسی اضافه — لایسنس #' . $origin_id);

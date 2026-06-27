@@ -1,7 +1,7 @@
 <?php
 /**
  * Plugin Name: اسپات پلیر
- * Version: 25.18
+ * Version: 25.19
  * Description: نسخه جدیدی از افزونه اسپات پلیر با قابلیت های جدید. توسعه داده شده توسط نیازهای آکادمی کارنو
  * Author: محمد کریم قصبه
  * Author URI: https://m-karim.ir/

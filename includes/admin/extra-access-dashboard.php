@@ -58,15 +58,22 @@ function spot_extra_fetch_requests(string $search, string $date_from, string $da
 	}, $orders)));
 	$origin_map = [];
 	if (!empty($origin_ids)) {
-		foreach (wc_get_orders(['include' => $origin_ids, 'limit' => count($origin_ids)]) as $o)
+		foreach (wc_get_orders(['include' => $origin_ids, 'limit' => count($origin_ids), 'status' => 'any']) as $o)
 			$origin_map[$o->get_id()] = $o;
 	}
 
 	$rows = [];
 	foreach ($orders as $order) {
-		$origin_id = (int) $order->get_meta('_spot_extra_origin_order');
-		$name      = trim($order->get_billing_first_name() . ' ' . $order->get_billing_last_name());
-		$phone     = $order->get_billing_phone();
+		$origin_id    = (int) $order->get_meta('_spot_extra_origin_order');
+		$origin_order = $origin_map[$origin_id] ?? null;
+		$name         = trim($order->get_billing_first_name() . ' ' . $order->get_billing_last_name());
+		$phone        = $order->get_billing_phone();
+		if ($name === '' && $origin_order instanceof WC_Order) {
+			$name = trim($origin_order->get_billing_first_name() . ' ' . $origin_order->get_billing_last_name());
+		}
+		if ($phone === '' && $origin_order instanceof WC_Order) {
+			$phone = $origin_order->get_billing_phone();
+		}
 
 		if ($search !== '') {
 			$haystack = mb_strtolower($name . ' ' . $phone);
@@ -75,7 +82,6 @@ function spot_extra_fetch_requests(string $search, string $date_from, string $da
 
 		$stage        = (int) $order->get_meta('_spot_extra_stage');
 		$dt           = $order->get_date_created();
-		$origin_order = $origin_map[$origin_id] ?? null;
 		$course_names = [];
 		if ($origin_order instanceof WC_Order) {
 			foreach ($origin_order->get_items() as $item) {
@@ -88,6 +94,7 @@ function spot_extra_fetch_requests(string $search, string $date_from, string $da
 			'order'        => $order,
 			'order_id'     => $order->get_id(),
 			'origin_id'    => $origin_id,
+			'origin_order' => $origin_order,
 			'stage'        => $stage,
 			'name'         => $name,
 			'phone'        => $phone,
@@ -482,12 +489,21 @@ function spot_extra_admin_render(): void {
 			<tr>
 				<td>
 					<a href="<?= esc_url($r['order']->get_edit_order_url()) ?>">#<?= $r['order_id'] ?></a>
-					<?php if ($r['origin_id']): ?>
-						<br><small style="color:#646970">← #<?= $r['origin_id'] ?></small>
+					<?php if ($r['origin_id']):
+						$origin_url = $r['origin_order'] instanceof WC_Order ? $r['origin_order']->get_edit_order_url() : admin_url('post.php?post=' . $r['origin_id'] . '&action=edit');
+					?>
+						<br><small style="color:#646970">← <a href="<?= esc_url($origin_url) ?>" style="color:#646970">#<?= $r['origin_id'] ?></a></small>
 					<?php endif; ?>
 				</td>
 				<td><?= esc_html($r['name']) ?></td>
-				<td dir="ltr"><a href="tel:<?= esc_attr(preg_replace('/[^0-9+]/', '', $r['phone'])) ?>"><?= esc_html($r['phone']) ?></a></td>
+				<?php
+				$raw_phone = preg_replace('/[^0-9]/', '', $r['phone']);
+				$display_phone = preg_replace('/^0/', '', $raw_phone);
+				?>
+				<td dir="ltr" style="white-space:nowrap">
+					<a href="tel:<?= esc_attr($raw_phone) ?>"><?= esc_html($display_phone) ?></a>
+					<button type="button" class="spot-copy-phone" data-phone="<?= esc_attr($display_phone) ?>" title="کپی شماره" style="border:none;background:none;cursor:pointer;padding:0 3px;font-size:14px;vertical-align:middle;opacity:.5">📋</button>
+				</td>
 				<td><?= esc_html($r['courses']) ?></td>
 				<td style="text-align:center"><?= esc_html($r['stage']) ?></td>
 				<td><?= wc_price($r['total']) ?></td>
@@ -532,6 +548,24 @@ function spot_extra_admin_render(): void {
 
 	<script>
 	(function () {
+		document.addEventListener('click', function (e) {
+			var cp = e.target.closest('.spot-copy-phone');
+			if (cp) {
+				var ph = cp.dataset.phone;
+				if (navigator.clipboard) {
+					navigator.clipboard.writeText(ph);
+				} else {
+					var ta = document.createElement('textarea');
+					ta.value = ph; document.body.appendChild(ta);
+					ta.select(); document.execCommand('copy');
+					document.body.removeChild(ta);
+				}
+				cp.textContent = '✓';
+				setTimeout(function () { cp.textContent = '📋'; }, 1500);
+				return;
+			}
+		});
+
 		var ajax = <?= wp_json_encode(admin_url('admin-ajax.php')) ?>;
 		document.addEventListener('click', function (e) {
 			var btn = e.target.closest('.spot-extra-sms-btn');
